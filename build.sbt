@@ -7,3 +7,5 @@ scalaVersion := "2.9.2"
 resolvers += "Twitter" at "http://maven.twttr.com"
 
 libraryDependencies += "com.twitter" % "util-core" % "5.3.7"
+
+libraryDependencies += "com.amazonaws" % "aws-java-sdk" % "1.3.18"
