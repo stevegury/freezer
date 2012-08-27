@@ -1,22 +1,28 @@
 package com.github.stevegury.freezer
 
-import java.io.File
-import java.io.FileInputStream
-import java.io.IOException
+import java.io.{File, FileInputStream}
 import java.security.MessageDigest
-import java.security.NoSuchAlgorithmException
-
 
 object TreeHash {
-  type Hash = Array[Byte]
   val chunkSize = 1024 * 1024;
 
-  def sha256(file: File): Hash = {
+  def sha256(file: File): Array[Byte] = {
     val chunks = getChunksHashes(file)
     reduceTree(chunks)
   }
 
-  private[this] def getChunksHashes(file: File): Seq[Hash] = {
+  def toHex(h: Array[Byte]) = {
+    h map { x =>
+      Integer.toHexString(x & 0xFF)
+    } map { c =>
+      if (c.length == 1)
+        "0" + c
+      else
+        c
+    } reduceLeft(_ + _)
+  }
+
+  private[this] def getChunksHashes(file: File): Seq[Array[Byte]] = {
     val md = MessageDigest.getInstance("SHA-256")
     val fileStream = new FileInputStream(file)
     val buffer = new Array[Byte](chunkSize)
@@ -27,7 +33,7 @@ object TreeHash {
       md.digest()
     }
 
-    def read(res: List[Hash]): List[Hash] = {
+    def read(res: List[Array[Byte]]): List[Array[Byte]] = {
       val bytesRead = fileStream.read(buffer, 0, chunkSize)
       if (bytesRead < 0)
         res.reverse
@@ -40,16 +46,16 @@ object TreeHash {
     read(Nil)
   }
 
-  private[this] def reduceTree(hashes: Seq[Hash]): Hash = {
-    val md = MessageDigest.getInstance("SHA-256")
-    def concatHash(hs: Seq[Hash]): Hash = {
+  private[this] def reduceTree(hashes: Seq[Array[Byte]]): Array[Byte] = {
+    def concatHash(hs: Seq[Array[Byte]]): Array[Byte] = {
+      val md = MessageDigest.getInstance("SHA-256")
       md.reset()
       md.update(hs(0))
       if (hs.tail != Nil)
         md.update(hs(1))
       md.digest()
     }
-    def reduce(hashes: Seq[Hash], res: List[Hash] = Nil): Seq[Hash] = {
+    def reduce(hashes: Seq[Array[Byte]], res: List[Array[Byte]] = Nil): Seq[Array[Byte]] = {
       if (hashes.isEmpty)
         res.reverse
       else
@@ -59,16 +65,5 @@ object TreeHash {
       hashes.head
     else
       reduceTree(reduce(hashes))
-  }
-
-  def toHex(h: Hash) = {
-    h map { x =>
-      Integer.toHexString(x & 0xFF)
-    } map { c =>
-      if (c.length == 1)
-        "0" + c
-      else
-        c
-    } reduceLeft(_ + _)
   }
 }
