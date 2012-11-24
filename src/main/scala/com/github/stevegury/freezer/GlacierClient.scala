@@ -7,7 +7,11 @@ import com.amazonaws.services.glacier.model.{CreateVaultRequest, ListVaultsReque
 import scala.collection.JavaConversions._
 
 class GlacierClient(val credentials: AWSCredentials, val endpoint: String) {
-  /*private[this]*/ val client = new AmazonGlacierClient(credentials)
+  /*private[this]*/ val client = {
+    val c = new AmazonGlacierClient(credentials)
+    c.setEndpoint(endpoint)
+    c
+  }
 
   /**
    * List the vaults
@@ -32,4 +36,4 @@ class GlacierClient(val credentials: AWSCredentials, val endpoint: String) {
   def getVault(name: String): Option[Vault] = listVaults filter { _.name == name } headOption
 }
 
-object GlacierClient extends GlacierClient(Freezer.defaultCredentials, Freezer.defaultEndpoint)
+object GlacierClient extends GlacierClient(defaultCredentials, defaultEndpoint)

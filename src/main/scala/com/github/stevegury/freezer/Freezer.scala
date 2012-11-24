@@ -1,33 +1,15 @@
 package com.github.stevegury.freezer
 
 import com.amazonaws.auth.PropertiesCredentials
-import com.amazonaws.services.glacier.TreeHashGenerator
-import com.codahale.jerkson.Json.{generate, parse}
-import com.twitter.util.StorageUnit
+import com.amazonaws.services.glacier.TreeHashGenerator.calculateTreeHash
+import com.codahale.jerkson.Json.parse
+import com.github.stevegury.freezer.Util.relativize
 
-import java.io.{FileOutputStream, FileInputStream, File}
+import java.io.{File, FileInputStream}
+import util.matching.Regex
 
-case class ArchiveInfo(
-  archiveId: String,
-  desc: String,
-  creationDate: String,
-  size: StorageUnit,
-  hash: String
-)
-case class Config(
-  vaultName: String,
-  files: Seq[ArchiveInfo] = Seq.empty,
-  pendingJobIds: Seq[String] = Seq.empty
-) {
-  def save(output: File) {
-    val fos = new FileOutputStream(output)
-    fos.write(generate(this).getBytes)
-    fos.close()
-  }
-}
 
 object Freezer {
-  /*private[this]*/ lazy val client = GlacierClient
 
   def parseArgs(args: Array[String]) = {
     // command: backup: backup the current dir
@@ -38,77 +20,126 @@ object Freezer {
     // options: ???
   }
 
-  def main(args: Array[String]) = {
-    val root = new File("/Users/stevegury/tmp/toto")
-    val cfgFile = new File(root, defaultConfigFilename.getName)
-    val action = "backup"
+  def help() {
+    println("Usage: freezer <action>")
+    println("  actions are: backup")
+    println("   - backup: backup the current (and all subdirectories)")
+    println("   - restore vaultName: restore the vaultName into the current directory")
+    println("   - list: List the current states of the server")
+  }
 
-    (action, readConfig(cfgFile)) match {
-      case ("backup", None) =>
-        val vaultName = root.getAbsoluteFile.getParentFile.getName
-        Config(vaultName).save(cfgFile)
-        backup(client.createVault(vaultName), root, Seq.empty)
+  def main(args: Array[String]) {
+    val action = args.headOption getOrElse "help"
 
-      case ("backup", Some(cfg)) =>
-        backup(client.createVault(cfg.vaultName), root, cfg.files)
+    val dir = new File(".").getAbsoluteFile.getParentFile
+    val cfg = readConfig(dir) getOrElse { createConfig(dir) }
+    val client = {
+      val credentials = new PropertiesCredentials(new File(cfg.credentials))
+      new GlacierClient(credentials, cfg.endpoint)
+    }
+    // TODO: Handle vault name collision
 
-      case _ => ???
+    action match {
+      case "backup" => backup(dir, cfg, client)
+      case "restore" if args.size > 1 => restore(dir, args(1), client)
+      case "list" => list(cfg, client)
+      case _ => help()
     }
   }
 
-  def backup(vault: Vault, root: File, previousState: Seq[ArchiveInfo]) = {
-    val index = previousState map { info => info.desc -> info } toMap
-    def scan(file: File) {
-      if (file.isDirectory)
-        file.listFiles() foreach { scan }
-      else if (file.getName == ".freezer") {
-        // skip
-      } else {
-        val path = relativize(root, file)
-        if (index.contains(path) && !needsBackup(file, index(path))) {
-          println("'%s' is up to date, skipping backup")
-        } else {
-          println("Uploading '%s'...".format(file.getAbsolutePath))
-          //vault.upload(file, path)
-        }
-      }
-    }
-
-    scan(root)
-  }
-
-  /*private[this]*/ def needsBackup(file: File, info: ArchiveInfo): Boolean =
-    (file.length() != info.size.inBytes) || (info.hash != TreeHashGenerator.calculateTreeHash(file))
-
-  /*private[this]*/ def relativize(base: File, path: File): String = {
-    def inCommon(a: List[String], b: List[String], res: List[String]): List[String] = (a, b) match {
-      case (Nil, Nil) => res
-      case (x :: xs, y :: ys) if x == y => inCommon(xs, ys, x :: res)
-      case _ => res
-    }
-
-    val baseList = base.getAbsolutePath.split(File.separator).toList
-    val pathList = path.getAbsolutePath.split(File.separator).toList
-    val common = inCommon(baseList, pathList, Nil).size
-    "../" * (baseList.size - common) + pathList.drop(common).mkString("/")
-  }
-
-  /*private[this]*/ def readConfig(cfgFile: File): Option[Config] = {
-    if (cfgFile.exists()) {
+  def readConfig(dir: File): Option[Config] = {
+    val cfgFile = new File(dir, configFilename)
+    if (dir == null) None
+    else if (!cfgFile.exists()) readConfig(dir.getParentFile)
+    else {
       val buffer = new Array[Byte](cfgFile.length().toInt)
       new FileInputStream(cfgFile).read(buffer)
       val json = new String(buffer)
       Some(parse[Config](json))
-    } else {
-      None
     }
   }
 
-  private[freezer] val defaultConfigFilename =
-    new File(".freezer")
-  private[freezer] val defaultCredentialsFilename =
-    new File(System.getProperty("user.home"), ".aws.glacier.credentials")
-  private[freezer] val defaultCredentials =
-    new PropertiesCredentials(defaultCredentialsFilename)
-  private[freezer] val defaultEndpoint = "https://glacier.us-east-1.amazonaws.com/"
+  def createConfig(dir: File): Config = {
+    val vaultName = dir.getName
+    val path = dir.getAbsolutePath + File.separator + configFilename
+    val config = Config(path, vaultName)
+    config.save()
+    config
+  }
+
+  def backup(dir: File, cfg: Config, client: GlacierClient) = {
+    val vault = getOrCreateVault(client, cfg.vaultName)
+    val root = new File(cfg.path).getParentFile
+    val index = cfg.archiveInfos map { info => info.desc -> info } toMap
+
+    val updated = updatedFiles(dir, index, relativize(root, _), Vector.empty[File])
+
+    val newIndex = updated.foldLeft(index) { (index, file) =>
+      val path = relativize(root, file)
+      val hash = calculateTreeHash(file)
+      val info = vault.upload(file, hash, path)
+      index.get(path) foreach { info =>
+        vault.deleteArchive(info.archiveId)
+      }
+      val nextIndex = index + (path -> info)
+      cfg.copy(archiveInfos = nextIndex.values.toList).save()
+      nextIndex
+    }
+    cfg.copy(archiveInfos = newIndex.values.toList)
+  }
+
+  def list(cfg: Config, client: GlacierClient) = {
+    val vault = getOrCreateVault(client, cfg.vaultName)
+    vault.getInventory match {
+      case Right(archiveInfos) => archiveInfos foreach { info => println(info.desc) }
+      case Left(jobId) => println("Inventory in prgress (JobID: '%s')".format(jobId))
+    }
+  }
+
+  def restore(root: File, vaultName: String, client: GlacierClient) = {
+    client.getVault(vaultName) match {
+      case Some(vault) => vault.getInventory match {
+        case Right(archiveInfos) =>
+          vault.download(root, archiveInfos)
+        case Left(jobId) =>
+          println("Restore requested but not yet ready")
+          println("(please redo this command later)")
+      }
+      case _ => println("Can't find vault '%s'".format(vaultName))
+    }
+  }
+
+  def getOrCreateVault(client: GlacierClient, vaultName: String) =
+    client.getVault(vaultName) getOrElse { client.createVault(vaultName) }
+
+  def updatedFiles(
+    file: File, index: Map[String, ArchiveInfo], relativize: File => String, updated: Seq[File]
+  ): Seq[File] = {
+    if (file.isDirectory)
+      file.listFiles().foldLeft(updated) {
+        (updated, file) => updatedFiles(file, index, relativize, updated) }
+    else if (file.getName == configFilename) { /* skip */ updated }
+    else if (file.length() == 0) { /* no supported WTF ??? */ updated }
+    else {
+      val path = relativize(file)
+      val h = calculateTreeHash(file)
+
+      index.get(path) match {
+        case Some(info) if h == info.hash => updated
+        case _ => updated :+ file
+      }
+    }
+  }
+
+  def filterFiles(
+    files: Seq[File], exclusions: Seq[String], relativize: File => String
+  ): Seq[File] = {
+    files filter { file =>
+      exclusions forall { excl =>
+        val regex = new Regex(excl)
+        val path = relativize(file)
+        ! regex.findFirstIn(path).isDefined
+      }
+    }
+  }
 }
