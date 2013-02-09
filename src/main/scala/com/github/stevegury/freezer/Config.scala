@@ -29,7 +29,7 @@ case class Config(
   vaultName: String,
   credentials: String = defaultCredentialsFilename,
   endpoint: String = defaultEndpoint,
-  exclusions: Seq[String] = Seq("\\.DS_Store"),
+  exclusions: Seq[String] = Seq(".*\\.DS_Store$"),
   archiveInfos: Seq[ArchiveInfo] = Seq.empty
 ) {
   def save() {

@@ -78,18 +78,23 @@ class Vault(
     completed foreach { jobDesc =>
       val path = jobDesc.getJobDescription
       val output = new File(root, path)
-      println("Downloading '%s'...".format(path))
-      downloadToFile(jobDesc.getJobId, output)
+      if (output.exists())
+        println("Skipping '%s' (already present)".format(path))
+      else {
+        println("Downloading '%s'...".format(path))
+        downloadToFile(jobDesc.getJobId, output)
+      }
     }
   }
 
   def requestDownload(archiveId: String, desc: String): String = {
-    val params = new JobParameters("JSON", "archive-retrieval", archiveId, desc)
+    val params = new JobParameters(null, "archive-retrieval", archiveId, desc)
     val req = new InitiateJobRequest(name, params)
     client.initiateJob(req).getJobId
   }
 
   def downloadToFile(jobId: String, file: File) {
+    file.getParentFile.mkdirs()
     val res = client.getJobOutput(new GetJobOutputRequest(name, jobId, ""))
     val is = res.getBody
     val buffer = new Array[Byte](is.available())
