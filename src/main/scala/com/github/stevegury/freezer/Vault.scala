@@ -4,11 +4,12 @@ import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.services.glacier.AmazonGlacierClient
 import com.amazonaws.services.glacier.model._
 import com.amazonaws.services.glacier.transfer.ArchiveTransferManager
+import com.amazonaws.util.StringInputStream
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.twitter.util.{StorageUnit, Time}
 
-import java.io.{FileOutputStream, File}
+import java.io.{InputStreamReader, BufferedReader, FileOutputStream, File}
 
 import scala.collection.JavaConversions._
 
@@ -141,10 +142,16 @@ class Vault(
 
   def retrieveInventory(jobId: String): Seq[ArchiveInfo] = {
     val res = client.getJobOutput(new GetJobOutputRequest(name, jobId, ""))
-    val is = res.getBody
-    val buffer = new Array[Byte](is.available())
-    is.read(buffer)
-    val output = new String(buffer)
+    val is = new InputStreamReader(res.getBody())
+
+    val strBuffer = new StringBuffer()
+    val buf = new Array[Char](4*1024)
+    var n = is.read(buf)
+    while(n > 0) {
+      strBuffer.append(buf, 0, n)
+      n = is.read(buf)
+    }
+    val output = strBuffer.toString
 
     // Ex of response:
     // {

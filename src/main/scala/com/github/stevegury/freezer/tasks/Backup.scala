@@ -107,10 +107,11 @@ class Backup(dir: File, root: File, cfg: Config, vault: Vault) {
       statusDir.delete()
   }
 
-  def run(): Unit = {
+  def run(): Int = {
     if (! rootStatusDir.exists())
       rootStatusDir.mkdirs()
 
     loop(dir, rootStatusDir)
+    0
   }
 }
