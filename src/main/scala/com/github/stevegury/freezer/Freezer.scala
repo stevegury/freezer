@@ -6,58 +6,67 @@ import com.github.stevegury.freezer.Util.relativize
 import java.io.{FilenameFilter, FileOutputStream, File}
 import java.util.Properties
 
+import com.github.stevegury.freezer.tasks.Backup
+
+import scala.io.StdIn
+
 object Freezer {
 
   def help() = {
     println("Usage: freezer <action>")
     println("  actions are:")
-    println("   - create: Just create the '.freezer' file.")
+    println("   - init: Just create the '.freezer' file.")
     println("   - backup: backup the current (and all subdirectories).")
+    println("   - inventory: List the current state of the vault from the server.")
     println("   - restore <vaultName>: restore the vaultName into the current directory.")
-    println("   - list: List the current state of the vault from the server.")
     -1
   }
 
-  def readConfig(dir: File): Option[Config] = {
-    val cfgFile = new File(dir, configFilename)
+  def findRoot(dir: File): Option[File] = {
+    val cfgDir = new File(dir, configDirname)
     if (dir == null)
       None
-    else if (!cfgFile.exists())
-      readConfig(dir.getParentFile)
+    else if (cfgDir.exists() && cfgDir.isDirectory)
+      Some(cfgDir.getParentFile.getAbsoluteFile)
     else
-      Some(Config.load(cfgFile.getAbsolutePath))
+      findRoot(dir.getParentFile)
   }
 
+  def readConfig(dir: File): Option[(File, Config)] = {
+    findRoot(dir) map { root =>
+      val config = new File(new File(root, configDirname), "config")
+      (root, Config.load(config))
+    }
+  }
 
   def main(args: Array[String]) {
     val action = args.headOption getOrElse "help"
     val dir = new File(".").getAbsoluteFile.getParentFile
-    val cfg = readConfig(dir)
 
-    val exitCode = (action, cfg) match {
-      case ("init", Some(cfg)) =>
-        error("Already a freezer directory!")
-      case ("init", None) => init(dir)
+    val exitCode = (action, readConfig(dir)) match {
+      case ("init", Some(_)) =>
+        error(action, "Already a freezer directory!")
+      case ("init", None) =>
+        init(dir)
       case ("backup", None) =>
-        error("Not a freezer directory!")
-      case ("backup", Some(cfg)) =>
-        backup(dir, cfg)
+        error(action, "Not a freezer directory! Use 'init' command to initialize a freezer directory.")
+      case ("backup", Some((root, cfg))) =>
+        backup(dir, root, cfg)
       case ("inventory", None) =>
-        error("Not a freezer directory!")
-      case ("inventory", Some(cfg)) =>
+        error(action, "Not a freezer directory! Use 'init' command to initialize a freezer directory.")
+      case ("inventory", Some((root, cfg))) =>
         inventory(cfg)
       case ("restore", None) =>
-        error("Do a freezer init, before requesting a restore!")
-      case ("restore", Some(cfg)) =>
-        restore()
-        0
+        restore(dir)
+      case ("restore", Some((root, cfg))) =>
+        error(action, "Already a freezer directory!")
       case _ => help()
     }
     System.exit(exitCode)
   }
 
-  def error(txt: String) = {
-    Console.err.println("Already a freezer directory!")
+  def error(action: String, txt: String) = {
+    Console.err.println("freezer %s error: '%s'".format(action, txt))
     -1
   }
 
@@ -68,76 +77,32 @@ object Freezer {
 
   def init(dir: File) = {
     def getOrDefault(txt: String, default: String) = {
-      val userInput = Console.readLine(txt + " [%s]: ", default)
+      val userInput = StdIn.readLine("\n%s [%s]: ", txt, default)
       if ("" != userInput) userInput else default
     }
-    val path = dir.getAbsolutePath + File.separator + configFilename
-    val config = Map(
-      "path" -> path,
+    statusDir(dir).mkdirs()
+
+    val cfg = Config(
       // TODO: Handle vault name collision
-      "vaultName" -> getOrDefault("VaultName", dir.getName),
-      "credentials" -> getOrDefault("Credential location", defaultCredentialsFilename),
-      "endpoint" -> getOrDefault("Endpoint", defaultEndpoint),
-      "exclusions" -> getOrDefault("Exclusions (comma separated)", ".*\\.DS_Store$")
+      vaultName = getOrDefault("VaultName", dir.getName),
+      credentials = getOrDefault("Credential location", defaultCredentialsFilename),
+      endpoint = getOrDefault("Endpoint", defaultEndpoint),
+      exclusions = getOrDefault("Exclusions (comma separated)", ".*\\.DS_Store$").split(",").map(_.r)
     )
-
-    new File(path, "status").mkdir()
-
-    val p = new Properties()
-    config foreach {
-      case (name, value) => p.setProperty(name, value)
-    }
-    p.store(new FileOutputStream(path), "Config file for vault '" + config("vaultName") + "'")
+    val cfgOutput = new File(configDir(dir), "config")
+    cfg.save(cfgOutput)
     0
   }
 
-  def backup(dir: File, cfg: Config) = {
+  def backup(dir: File, root: File, cfg: Config) = {
     val client = clientFromConfig(cfg)
-    val vault = client.getVault(cfg.vaultName) getOrElse { client.createVault(cfg.vaultName) }
-    val root = new File(cfg.path).getParentFile
-    val rootStatusDir = new File(dir.getAbsolutePath + File.separator + "status")
-
-    def loop(dir: File, statusDir: File) {
-      // TODO: check for exclusion (pattern matching)
-      val files = dir.listFiles.filter(_.isFile).xmap(f => f.getName -> f).toMap
-      val statuses = statusDir.listFiles.filter(_.isFile).map(f => f.getName -> f).toMap
-
-      val newFiles = (files.keySet -- statuses.keySet).map(files)
-      val deletedFiles = (statuses.keySet -- files.keySet).map(statuses)
-
-      def upload(file: File, hash: String, relativePath: String) = {
-        val archInfo = vault.upload(file, hash, relativePath)
-        archInfo.save(rootStatusDir + File.separator + relativePath)
-      }
-
-      newFiles foreach { f =>
-        val path = relativize(f, root)
-        val hash = calculateTreeHash(f)
-        vault.upload(f, hash, path)
-      }
-      deletedFiles foreach { archInfoPath =>
-        val archiveInfo = ArchiveInfo.load(archInfoPath.getAbsolutePath)
-        vault.deleteArchive(archiveInfo.archiveId)
-      }
-      files foreach { case (name, file) =>
-        val archiveInfo = ArchiveInfo.load(file.getAbsolutePath)
-        val path = relativize(file, root)
-        lazy val hash = calculateTreeHash(file)
-        if (file.length() != archiveInfo.size &&
-          calculateTreeHash(file) != archiveInfo.hash) {
-          val archInfo = vault.upload(file, hash, path)
-          archInfo.save(statuses(name).getAbsolutePath)
-          vault.deleteArchive(archInfo.archiveId)
-        }
-      }
-
-      // TODO: what about deleted directory (only present in .freezer/status/...)?
-      dir.listFiles().filter(_.isDirectory) foreach { d =>
-        loop(d, new File(statusDir, d.getName))
-      }
+    val vault = client.getVault(cfg.vaultName) getOrElse {
+      println("Creating Vault '%s'...".format(cfg.vaultName))
+      client.createVault(cfg.vaultName)
     }
+    val task = new Backup(dir, root, cfg, vault)
+    task.run()
 
-    loop(dir, rootStatusDir)
     0
   }
 
@@ -154,27 +119,28 @@ object Freezer {
     0
   }
 
-  def restore(cfg: Config) = {
-    val client = clientFromConfig(cfg)
-    val vault = client.getVault(cfg.vaultName).get()
-    val root = new File(cfg.path).getParentFile
-
-    val newCfg = client.getVault(vaultName) match {
-      case Some(vault) => vault.getInventory match {
-        case Right(archiveInfos) =>
-          vault.download(root, archiveInfos)
-          cfg.copy(archiveInfos = archiveInfos)
-        case Left(jobId) =>
-          println("Restore requested but not yet ready")
-          println("(please redo this command later)")
-          cfg
-      }
-      case _ =>
-        println("Can't find vault '%s'".format(vaultName))
-        cfg
-    }
-    newCfg.copy(vaultName = vaultName)
-    newCfg.save()
+  def restore(dir: File): Int = {
+//    val client = clientFromConfig(cfg)
+//    val vault = client.getVault(cfg.vaultName).get
+//    val root = new File(cfg.path).getParentFile
+//
+//    val newCfg = client.getVault(vaultName) match {
+//      case Some(vault) => vault.getInventory match {
+//        case Right(archiveInfos) =>
+//          vault.download(root, archiveInfos)
+//          cfg.copy(archiveInfos = archiveInfos)
+//        case Left(jobId) =>
+//          println("Restore requested but not yet ready")
+//          println("(please redo this command later)")
+//          cfg
+//      }
+//      case _ =>
+//        println("Can't find vault '%s'".format(vaultName))
+//        cfg
+//    }
+//    newCfg.copy(vaultName = vaultName)
+//    newCfg.save()
+    0
   }
 
 

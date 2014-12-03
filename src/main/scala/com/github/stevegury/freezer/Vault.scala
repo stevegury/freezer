@@ -4,7 +4,8 @@ import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.services.glacier.AmazonGlacierClient
 import com.amazonaws.services.glacier.model._
 import com.amazonaws.services.glacier.transfer.ArchiveTransferManager
-import com.codahale.jerkson.Json.parse
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.twitter.util.{StorageUnit, Time}
 
 import java.io.{FileOutputStream, File}
@@ -37,16 +38,20 @@ class Vault(
   val arn: String) {
 
   val atm = new ArchiveTransferManager(client, credentials)
+  val jsonReader = {
+    val mapper = new ObjectMapper()
+    mapper.registerModule(DefaultScalaModule)
+    mapper
+  }
 
   def this(client: AmazonGlacierClient, credentials: AWSCredentials, desc: DescribeVaultOutput) =
     this(client, credentials, desc.getVaultName, desc.getCreationDate, desc.getLastInventoryDate,
         desc.getNumberOfArchives, new StorageUnit(desc.getSizeInBytes), desc.getVaultARN)
 
   def upload(file: File, hash: String, desc: String) = {
-    println("Uploading '%s'...".format(desc))
-    val res = atm.upload(name, desc, file)
+    //val res = atm.upload(name, desc, file)
     ArchiveInfo(
-      res.getArchiveId,
+      "debugArchiveId", //res.getArchiveId,
       desc,
       Time.now.toString(),
       file.length(),
@@ -55,7 +60,8 @@ class Vault(
   }
 
   def deleteArchive(archiveId: String) {
-    client.deleteArchive(new DeleteArchiveRequest(name, archiveId))
+    if (archiveId != "debugArchiveId")
+      client.deleteArchive(new DeleteArchiveRequest(name, archiveId))
   }
 
   def download(root: File, archiveInfos: Seq[ArchiveInfo]) = {
@@ -154,7 +160,7 @@ class Vault(
     //     }
     //   ]
     // }
-    parse[InventoryRes](output).ArchiveList map { amazonArchiveInfo =>
+    jsonReader.readValue(output, classOf[InventoryRes]).ArchiveList map { amazonArchiveInfo =>
       ArchiveInfo(
         amazonArchiveInfo.ArchiveId,
         amazonArchiveInfo.ArchiveDescription,

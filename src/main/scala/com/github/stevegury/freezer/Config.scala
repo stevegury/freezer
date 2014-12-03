@@ -1,7 +1,9 @@
 package com.github.stevegury.freezer
 
-import java.io.{FileInputStream, FileOutputStream}
+import java.io.{File, FileInputStream, FileOutputStream}
 import java.util.Properties
+
+import scala.util.matching.Regex
 
 case class ArchiveInfo(
   archiveId: String,
@@ -10,7 +12,7 @@ case class ArchiveInfo(
   size: Long,
   hash: String
 ) {
-  def save(path: String) {
+  def save(outputFile: File) {
     val p = new Properties()
     p.setProperty("archiveId", archiveId)
     p.setProperty("desc", desc)
@@ -18,14 +20,16 @@ case class ArchiveInfo(
     p.setProperty("size", size.toString)
     p.setProperty("hash", hash)
 
-    p.store(new FileOutputStream(path), "ArchiveInfo for file '" + desc + "'")
+    p.store(new FileOutputStream(outputFile), "ArchiveInfo for file '" + desc + "'")
   }
 }
 
 object ArchiveInfo {
-  def load(path: String): ArchiveInfo = {
+  def load(inputFile: File): ArchiveInfo = {
     val p = new Properties()
-    p.load(new FileInputStream(path))
+    val input = new FileInputStream(inputFile)
+    p.load(input)
+    input.close()
 
     Seq("archiveId", "desc", "creationDate", "size", "hash") foreach {
       name => require(null != p.getProperty(name))
@@ -42,39 +46,41 @@ object ArchiveInfo {
 }
 
 case class Config(
-  path: String,
   vaultName: String,
   credentials: String = defaultCredentialsFilename,
   endpoint: String = defaultEndpoint,
-  exclusions: Seq[String] = Seq(".*\\.DS_Store$")
+  exclusions: Seq[Regex] = Seq("\\.DS_Store".r, "\\.git".r)
 ) {
-  def save() {
+  def save(outputFile: File) {
     val p = new Properties()
-    p.setProperty("path", path)
     p.setProperty("vaultName", vaultName)
     p.setProperty("credentials", credentials)
     p.setProperty("endpoint", endpoint)
-    p.setProperty("exclusions", exclusions.mkString(","))
+    p.setProperty("exclusions", exclusions.map(_.regex).mkString(","))
 
-    p.store(new FileOutputStream(path), "Config file for vault '" + vaultName + "'")
+    val output = new FileOutputStream(outputFile)
+    p.store(output, "Config file for vault '" + vaultName + "'")
+    output.close()
   }
 }
 
 object Config {
-  def load(path: String): Config = {
+  def load(inputFile: File): Config = {
+    require(inputFile.exists())
     val p = new Properties()
-    p.load(new FileInputStream(path))
+    val input = new FileInputStream(inputFile)
+    p.load(input)
+    input.close()
 
-    Seq("vaultName", "credentials", "endpoint", "path") foreach {
+    Seq("vaultName", "credentials", "endpoint", "exclusions") foreach {
       name => require(null != p.getProperty(name))
     }
 
     Config(
-      path = path,
       vaultName = p.getProperty("vaultName"),
       credentials = p.getProperty("credentials"),
       endpoint = p.getProperty("endpoint"),
-      exclusions = p.getProperty("exclusions").split(",")
+      exclusions = p.getProperty("exclusions").split(",").map(_.r)
     )
   }
 }

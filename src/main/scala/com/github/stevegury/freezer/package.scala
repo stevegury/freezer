@@ -5,6 +5,7 @@ import com.amazonaws.auth.PropertiesCredentials
 
 package object freezer {
   val configFilename = ".freezer"
+  val configDirname = ".freezer"
 
   val defaultCredentialsFilename =
     System.getProperty("user.home") + File.separator + ".aws.glacier.credentials"
@@ -16,4 +17,8 @@ package object freezer {
 
   val ex = new Exception("Not yet implemented")
   def ??? = throw ex
+
+  def configDir(root: File) = new File(root.getAbsoluteFile, configDirname)
+
+  def statusDir(root: File) = new File(configDir(root), "status")
 }
