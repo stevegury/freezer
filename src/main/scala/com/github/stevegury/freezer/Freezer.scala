@@ -1,14 +1,7 @@
 package com.github.stevegury.freezer
 
-import com.amazonaws.auth.PropertiesCredentials
-import com.amazonaws.services.glacier.TreeHashGenerator.calculateTreeHash
-import com.github.stevegury.freezer.Util.relativize
-import java.io.{FilenameFilter, FileOutputStream, File}
-import java.util.Properties
-
 import com.github.stevegury.freezer.tasks.{Restore, Inventory, Init, Backup}
-
-import scala.io.StdIn
+import java.io.File
 
 object Freezer {
 
@@ -56,7 +49,7 @@ object Freezer {
     val cfgDir = new File(dir, configDirname)
     if (dir == null)
       None
-    else if (cfgDir.exists() && cfgDir.isDirectory)
+    else if (cfgDir.isDirectory)
       Some(cfgDir.getParentFile.getAbsoluteFile)
     else
       findRoot(dir.getParentFile)

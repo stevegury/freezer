@@ -71,7 +71,7 @@ class Backup(dir: File, root: File, cfg: Config, vault: Vault, reporter: String 
     deletedFiles foreach { statusFilename =>
       val statusFile = new File(statusDir, statusFilename)
       val relativePath = relativize(rootStatusDir, statusFile)
-      val archiveInfo = ArchiveInfo.load(statusFile)
+      val archiveInfo = ArchiveInfo.load(statusFile, relativePath)
       reporter(s"Removing deleted file: $relativePath")
       vault.deleteArchive(archiveInfo.archiveId)
       statusFile.delete()
@@ -80,7 +80,7 @@ class Backup(dir: File, root: File, cfg: Config, vault: Vault, reporter: String 
       val file = new File(dir, filename)
       val relativePath = relativize(root, file)
       val archInfoPath = new File(statusDir, filename)
-      val oldArchiveInfo = ArchiveInfo.load(archInfoPath)
+      val oldArchiveInfo = ArchiveInfo.load(archInfoPath, relativePath)
       if (file.length() == 0) {
         reporter(s"Removing zero-byte file: $relativePath")
         vault.deleteArchive(oldArchiveInfo.archiveId)

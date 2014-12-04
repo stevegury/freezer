@@ -6,40 +6,33 @@ import scala.util.matching.Regex
 
 case class ArchiveInfo(
   archiveId: String,
-  desc: String,
-  creationDate: String,
-  size: Long,
-  hash: String
+  hash: String,
+  path: String // not saved to file
 ) {
   def save(outputFile: File) {
     val p = new Properties()
     p.setProperty("archiveId", archiveId)
-    p.setProperty("desc", desc)
-    p.setProperty("creationDate", creationDate)
-    p.setProperty("size", size.toString)
     p.setProperty("hash", hash)
 
-    p.store(new FileOutputStream(outputFile), "ArchiveInfo for file '" + desc + "'")
+    p.store(new FileOutputStream(outputFile), "")
   }
 }
 
 object ArchiveInfo {
-  def load(inputFile: File): ArchiveInfo = {
+  def load(inputFile: File, relativePath: String): ArchiveInfo = {
     val p = new Properties()
     val input = new FileInputStream(inputFile)
     p.load(input)
     input.close()
 
-    Seq("archiveId", "desc", "creationDate", "size", "hash") foreach {
+    Seq("archiveId", "hash") foreach {
       name => require(null != p.getProperty(name))
     }
 
     ArchiveInfo(
       archiveId = p.getProperty("archiveId"),
-      desc = p.getProperty("desc"),
-      creationDate = p.getProperty("creationDate"),
-      size = p.getProperty("size").toInt,
-      hash = p.getProperty("hash")
+      hash = p.getProperty("hash"),
+      path = relativePath
     )
   }
 }

@@ -56,10 +56,8 @@ class Vault(
     val now = new Date
     ArchiveInfo(
       "",//res.getArchiveId,
-      desc,
-      dateFormat.format(now),
-      file.length(),
-      hash
+      hash,
+      desc
     )
   }
 
@@ -76,8 +74,8 @@ class Vault(
     val (completed, inProgress) = currentJobIds partition { _.getCompleted }
 
     newJobs foreach { info =>
-      val jobId = requestDownload(info.archiveId, info.desc)
-      println("Requesting download for: '%s'".format(info.desc))
+      val jobId = requestDownload(info.archiveId)
+      println(s"Requesting download for: '${info.archiveId}'")
       jobId
     }
     inProgress foreach { jobDesc =>
@@ -96,8 +94,8 @@ class Vault(
     }
   }
 
-  def requestDownload(archiveId: String, desc: String): String = {
-    val params = new JobParameters(null, "archive-retrieval", archiveId, desc)
+  def requestDownload(archiveId: String): String = {
+    val params = new JobParameters(null, "archive-retrieval", archiveId, "TODO:description")
     val req = new InitiateJobRequest(name, params)
     client.initiateJob(req).getJobId
   }
@@ -179,10 +177,8 @@ class Vault(
     jsonReader.readValue(output, classOf[InventoryRes]).ArchiveList map { amazonArchiveInfo =>
       ArchiveInfo(
         amazonArchiveInfo.ArchiveId,
-        amazonArchiveInfo.ArchiveDescription,
-        amazonArchiveInfo.CreationDate,
-        amazonArchiveInfo.Size,
-        amazonArchiveInfo.SHA256TreeHash
+        amazonArchiveInfo.SHA256TreeHash,
+        amazonArchiveInfo.ArchiveDescription
       )
     }
   }
