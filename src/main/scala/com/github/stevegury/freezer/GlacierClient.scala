@@ -1,15 +1,19 @@
 package com.github.stevegury.freezer
 
-import com.amazonaws.auth.AWSCredentials
+import java.io.File
+
+import com.amazonaws.auth.{PropertiesCredentials, AWSCredentials}
 import com.amazonaws.services.glacier.AmazonGlacierClient
 import com.amazonaws.services.glacier.model.{DescribeVaultRequest, CreateVaultRequest, DeleteVaultRequest, ListVaultsRequest}
-import com.twitter.util.StorageUnit
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 
 class GlacierClient(val credentials: AWSCredentials, val endpoint: String) {
-  /*private[this]*/ val client = {
+
+  def this(cfg: Config) = this(new PropertiesCredentials(new File(cfg.credentials)), cfg.endpoint)
+
+  private[this] val client = {
     val c = new AmazonGlacierClient(credentials)
     c.setEndpoint(endpoint)
     c
@@ -48,7 +52,7 @@ class GlacierClient(val credentials: AWSCredentials, val endpoint: String) {
       val creationDate = desc.getCreationDate
       val inventoryDate = desc.getLastInventoryDate
       val numberOfArchive = desc.getNumberOfArchives
-      val size: StorageUnit = new StorageUnit(desc.getSizeInBytes)
+      val size = desc.getSizeInBytes
       val arn = desc.getVaultARN
 
       Some(new Vault(client, credentials, name, creationDate, inventoryDate, numberOfArchive, size, arn))

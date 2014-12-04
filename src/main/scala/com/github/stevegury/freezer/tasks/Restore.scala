@@ -4,7 +4,7 @@ import java.io.File
 
 import com.github.stevegury.freezer.Vault
 
-class Restore(vault: Vault) {
+class Restore(vault: Vault, reporter: String => Unit) {
   def run(): Int = {
 //    val root = new File(cfg.path).getParentFile
 //

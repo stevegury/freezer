@@ -1,15 +1,16 @@
 package com.github.stevegury.freezer
 
+import java.text.SimpleDateFormat
+import java.util.Date
+
 import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.services.glacier.AmazonGlacierClient
 import com.amazonaws.services.glacier.model._
 import com.amazonaws.services.glacier.transfer.ArchiveTransferManager
-import com.amazonaws.util.StringInputStream
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import com.twitter.util.{StorageUnit, Time}
 
-import java.io.{InputStreamReader, BufferedReader, FileOutputStream, File}
+import java.io._
 
 import scala.collection.JavaConversions._
 
@@ -35,34 +36,35 @@ class Vault(
   val creationDate: String,
   val inventoryDate: String,
   val numberOfArchive: Long,
-  val size: StorageUnit,
+  val size: Long,
   val arn: String) {
 
-  val atm = new ArchiveTransferManager(client, credentials)
-  val jsonReader = {
+  def this(client: AmazonGlacierClient, credentials: AWSCredentials, desc: DescribeVaultOutput) =
+    this(client, credentials, desc.getVaultName, desc.getCreationDate, desc.getLastInventoryDate,
+        desc.getNumberOfArchives, desc.getSizeInBytes, desc.getVaultARN)
+
+  private[this] val atm = new ArchiveTransferManager(client, credentials)
+  private[this] val jsonReader = {
     val mapper = new ObjectMapper()
     mapper.registerModule(DefaultScalaModule)
     mapper
   }
-
-  def this(client: AmazonGlacierClient, credentials: AWSCredentials, desc: DescribeVaultOutput) =
-    this(client, credentials, desc.getVaultName, desc.getCreationDate, desc.getLastInventoryDate,
-        desc.getNumberOfArchives, new StorageUnit(desc.getSizeInBytes), desc.getVaultARN)
+  private[this] val dateFormat = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss")
 
   def upload(file: File, hash: String, desc: String) = {
     //val res = atm.upload(name, desc, file)
+    val now = new Date
     ArchiveInfo(
-      "debugArchiveId", //res.getArchiveId,
+      "",//res.getArchiveId,
       desc,
-      Time.now.toString(),
+      dateFormat.format(now),
       file.length(),
       hash
     )
   }
 
   def deleteArchive(archiveId: String) {
-    if (archiveId != "debugArchiveId")
-      client.deleteArchive(new DeleteArchiveRequest(name, archiveId))
+    //client.deleteArchive(new DeleteArchiveRequest(name, archiveId))
   }
 
   def download(root: File, archiveInfos: Seq[ArchiveInfo]) = {
@@ -103,11 +105,17 @@ class Vault(
   def downloadToFile(jobId: String, file: File) {
     file.getParentFile.mkdirs()
     val res = client.getJobOutput(new GetJobOutputRequest(name, jobId, ""))
-    val is = res.getBody
-    val buffer = new Array[Byte](is.available())
-    is.read(buffer)
-    val os = new FileOutputStream(file)
-    os.write(buffer)
+
+    val is = new BufferedInputStream(res.getBody)
+    val os = new BufferedOutputStream(new FileOutputStream(file))
+
+    val buf = new Array[Byte](1024*1024)
+    var n = is.read(buf)
+    while(n > 0) {
+      os.write(buf, 0, n)
+      n = is.read(buf)
+    }
+    is.close()
     os.close()
   }
 
@@ -151,6 +159,7 @@ class Vault(
       strBuffer.append(buf, 0, n)
       n = is.read(buf)
     }
+    is.close()
     val output = strBuffer.toString
 
     // Ex of response:

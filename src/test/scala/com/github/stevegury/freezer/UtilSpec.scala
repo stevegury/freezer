@@ -1,6 +1,8 @@
 package com.github.stevegury.freezer
 
-import com.twitter.util.Time
+import java.text.SimpleDateFormat
+import java.util.Date
+
 import com.amazonaws.services.glacier.TreeHashGenerator._
 import java.io._
 import org.specs2._
@@ -77,10 +79,12 @@ class UtilSpec extends Specification { def is =
 
     def createIndex(files: Seq[File]) = files map { f =>
       val path = Util.relativize(root, f)
+      val dateFormat = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss")
+      val now = new Date
       path -> ArchiveInfo(
         rnd.nextInt().toString,
         path,
-        Time.now.toString(),
+        dateFormat.format(now),
         f.length(),
         calculateTreeHash(f)
       )

@@ -2,7 +2,6 @@ package com.github.stevegury.freezer
 
 import java.io.{File, FileInputStream, FileOutputStream}
 import java.util.Properties
-
 import scala.util.matching.Regex
 
 case class ArchiveInfo(

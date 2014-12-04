@@ -4,10 +4,20 @@ import com.github.stevegury.freezer._
 import java.io.File
 import scala.io.StdIn
 
-class Init(root: File) {
+class Init(root: File, reporter: String => Unit) {
   def run(): Int = {
-    // TODO: Handle vault name collision
-    initConfig()
+    var cfg = initConfig()
+    var isVaultAvailable = false
+    while (!isVaultAvailable) {
+      val client = new GlacierClient(cfg)
+      val vault = client.getVault(cfg.vaultName)
+      if (! vault.isDefined)
+        isVaultAvailable = true
+      else {
+        reporter(s"Vault '${cfg.vaultName}' already exists! Try again")
+        cfg = initConfig()
+      }
+    }
     0
   }
 

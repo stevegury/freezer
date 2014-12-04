@@ -7,7 +7,7 @@ import java.io.File
 import scala.collection._
 import scala.util.matching.Regex
 
-class Backup(dir: File, root: File, cfg: Config, vault: Vault) {
+class Backup(dir: File, root: File, cfg: Config, vault: Vault, reporter: String => Unit) {
 
   private[this] val rootStatusDir = statusDir(root)
   private[this] val exclusions = cfg.exclusions
@@ -64,30 +64,32 @@ class Backup(dir: File, root: File, cfg: Config, vault: Vault) {
       if (f.length() != 0) {
         val relativePath = relativize(root, f)
         val hash = calculateTreeHash(f)
-        println(s"Uploading new file: $relativePath")
+        reporter(s"Uploading new file: $relativePath")
         upload(f, hash, relativePath)
       }
     }
     deletedFiles foreach { statusFilename =>
       val statusFile = new File(statusDir, statusFilename)
+      val relativePath = relativize(rootStatusDir, statusFile)
       val archiveInfo = ArchiveInfo.load(statusFile)
-      println(s"Removing deleted file: ${archiveInfo.desc}")
+      reporter(s"Removing deleted file: $relativePath")
       vault.deleteArchive(archiveInfo.archiveId)
       statusFile.delete()
     }
     otherFiles foreach { case filename =>
       val file = new File(dir, filename)
+      val relativePath = relativize(root, file)
       val archInfoPath = new File(statusDir, filename)
       val oldArchiveInfo = ArchiveInfo.load(archInfoPath)
       if (file.length() == 0) {
-        println(s"Removing zero-byte file: ${oldArchiveInfo.desc}")
+        reporter(s"Removing zero-byte file: $relativePath")
         vault.deleteArchive(oldArchiveInfo.archiveId)
         archInfoPath.delete()
       } else {
         val hash = calculateTreeHash(file)
         if (hash != oldArchiveInfo.hash) {
           val relativePath = relativize(root, file)
-          println(s"Updating modified file: $relativePath")
+          reporter(s"Updating modified file: $relativePath")
           val newArchiveInfo = vault.upload(file, hash, relativePath)
           newArchiveInfo.save(archInfoPath)
           vault.deleteArchive(oldArchiveInfo.archiveId)

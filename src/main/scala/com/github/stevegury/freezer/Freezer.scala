@@ -22,22 +22,7 @@ object Freezer {
     -1
   }
 
-  def findRoot(dir: File): Option[File] = {
-    val cfgDir = new File(dir, configDirname)
-    if (dir == null)
-      None
-    else if (cfgDir.exists() && cfgDir.isDirectory)
-      Some(cfgDir.getParentFile.getAbsoluteFile)
-    else
-      findRoot(dir.getParentFile)
-  }
-
-  def readConfig(dir: File): Option[(File, Config)] = {
-    findRoot(dir) map { root =>
-      val config = new File(new File(root, configDirname), "config")
-      (root, Config.load(config))
-    }
-  }
+  private val reporter: String => Unit = Console.out.println
 
   def main(args: Array[String]) {
     val action = args.headOption getOrElse "help"
@@ -57,7 +42,7 @@ object Freezer {
       case ("inventory", Some((root, cfg))) =>
         inventory(cfg)
       case ("restore", None) =>
-        val init = new Init(dir)
+        val init = new Init(dir, reporter)
         val cfg = init.initConfig()
         restore(dir, dir, cfg)
       case ("restore", Some((root, cfg))) =>
@@ -67,65 +52,59 @@ object Freezer {
     System.exit(exitCode)
   }
 
-  def error(action: String, txt: String) = {
+  private def findRoot(dir: File): Option[File] = {
+    val cfgDir = new File(dir, configDirname)
+    if (dir == null)
+      None
+    else if (cfgDir.exists() && cfgDir.isDirectory)
+      Some(cfgDir.getParentFile.getAbsoluteFile)
+    else
+      findRoot(dir.getParentFile)
+  }
+
+  private def readConfig(dir: File): Option[(File, Config)] = {
+    findRoot(dir) map { root =>
+      val config = new File(new File(root, configDirname), "config")
+      (root, Config.load(config))
+    }
+  }
+
+  private def error(action: String, txt: String) = {
     Console.err.println("freezer %s error: '%s'".format(action, txt))
     -1
   }
 
-  def clientFromConfig(cfg: Config): GlacierClient = {
-    val credentials = new PropertiesCredentials(new File(cfg.credentials))
-    new GlacierClient(credentials, cfg.endpoint)
-  }
-
-  def init(dir: File) = {
-    val task = new Init(dir)
+  private def init(dir: File) = {
+    val task = new Init(dir, reporter)
     task.run()
   }
 
-  def backup(dir: File, root: File, cfg: Config) = {
-    val client = clientFromConfig(cfg)
+  private def backup(dir: File, root: File, cfg: Config) = {
+    val client = new GlacierClient(cfg)
     val vault = client.getVault(cfg.vaultName) getOrElse {
-      // TODO: this shouldn't happen, init should have created the Vault
-      println("Creating Vault '%s'...".format(cfg.vaultName))
-      client.createVault(cfg.vaultName)
+      throw new IllegalStateException(s"Unable to access vault '${cfg.vaultName}'!")
     }
-    val task = new Backup(dir, root, cfg, vault)
+    val task = new Backup(dir, root, cfg, vault, reporter)
     task.run()
 
     0
   }
 
-  def inventory(cfg: Config) = {
-    val client = clientFromConfig(cfg)
-    val vault = client.getVault(cfg.vaultName).
-      getOrElse { client.createVault(cfg.vaultName) } // TODO: ditto, this shouldn't happen
+  private def inventory(cfg: Config) = {
+    val client = new GlacierClient(cfg)
+    val vault = client.getVault(cfg.vaultName) getOrElse {
+      throw new IllegalStateException(s"Unable to access vault '${cfg.vaultName}'!")
+    }
 
-    val task = new Inventory(vault)
+    val task = new Inventory(vault, reporter)
     task.run()
   }
 
-  def restore(dir: File, root: File, cfg: Config): Int = {
-    val client = clientFromConfig(cfg)
+  private def restore(dir: File, root: File, cfg: Config): Int = {
+    val client = new GlacierClient(cfg)
     val vault = client.getVault(cfg.vaultName).get
 
-//    val newCfg = client.getVault(vaultName) match {
-//      case Some(vault) => vault.getInventory match {
-//        case Right(archiveInfos) =>
-//          vault.download(root, archiveInfos)
-//          cfg.copy(archiveInfos = archiveInfos)
-//        case Left(jobId) =>
-//          println("Restore requested but not yet ready")
-//          println("(please redo this command later)")
-//          cfg
-//      }
-//      case _ =>
-//        println("Can't find vault '%s'".format(vaultName))
-//        cfg
-//    }
-//    newCfg.copy(vaultName = vaultName)
-//    newCfg.save()
-
-    val task = new Restore(vault)
+    val task = new Restore(vault, reporter)
     task.run()
   }
 }
