@@ -1,7 +1,7 @@
 package com.github.stevegury.freezer.tasks
 
 import com.amazonaws.services.glacier.TreeHashGenerator._
-import com.github.stevegury.freezer.Util._
+import com.github.stevegury.freezer.Path.relativize
 import com.github.stevegury.freezer._
 import java.io.File
 import scala.collection._

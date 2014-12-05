@@ -5,7 +5,7 @@ import scala.util.matching.Regex
 import com.amazonaws.services.glacier.TreeHashGenerator._
 import scala.Some
 
-object Util {
+object Path {
   /**
    * Return the relative path between two files
    * ex: relativize(new File("/a/b/c"), new File("/a/b/c/d/e/f")) == "d/e/f"

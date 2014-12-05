@@ -9,7 +9,13 @@ import com.amazonaws.services.glacier.model.{DescribeVaultRequest, CreateVaultRe
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 
-class GlacierClient(val credentials: AWSCredentials, val endpoint: String) {
+trait GlacierClient {
+  def listVaults: Seq[Vault]
+  def createVault(name: String): Vault
+  def getVault(name: String): Option[Vault]
+}
+
+class AwsGlacierClient(val credentials: AWSCredentials, val endpoint: String) extends GlacierClient {
 
   def this(cfg: Config) = this(new PropertiesCredentials(new File(cfg.credentials)), cfg.endpoint)
 
@@ -27,7 +33,7 @@ class GlacierClient(val credentials: AWSCredentials, val endpoint: String) {
     val req = new ListVaultsRequest
     var res = client.listVaults(req)
     while (res.getMarker != null) {
-      buf ++= res.getVaultList map { desc => new Vault(client, credentials, desc) }
+      buf ++= res.getVaultList map { desc => new AwsVault(client, credentials, desc) }
       req.setMarker(res.getMarker)
       res = client.listVaults(req)
     }
@@ -55,7 +61,7 @@ class GlacierClient(val credentials: AWSCredentials, val endpoint: String) {
       val size = desc.getSizeInBytes
       val arn = desc.getVaultARN
 
-      Some(new Vault(client, credentials, name, creationDate, inventoryDate, numberOfArchive, size, arn))
+      Some(new AwsVault(client, credentials, name, creationDate, inventoryDate, numberOfArchive, size, arn))
     } catch {
       case ex: Throwable =>
         println(ex)
@@ -63,5 +69,3 @@ class GlacierClient(val credentials: AWSCredentials, val endpoint: String) {
     }
   }
 }
-
-object GlacierClient extends GlacierClient(defaultCredentials, defaultEndpoint)

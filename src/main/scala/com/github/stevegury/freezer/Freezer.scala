@@ -3,6 +3,8 @@ package com.github.stevegury.freezer
 import com.github.stevegury.freezer.tasks.{Restore, Inventory, Init, Backup}
 import java.io.File
 
+import scala.io.StdIn
+
 object Freezer {
 
   def help() = {
@@ -35,7 +37,7 @@ object Freezer {
       case ("inventory", Some((root, cfg))) =>
         inventory(cfg)
       case ("restore", None) =>
-        val init = new Init(dir, reporter)
+        val init = new Init(dir, reporter, {str: String => StdIn.readLine(str)})
         val cfg = init.initConfig()
         restore(dir, dir, cfg)
       case ("restore", Some((root, cfg))) =>
@@ -68,12 +70,12 @@ object Freezer {
   }
 
   private def init(dir: File) = {
-    val task = new Init(dir, reporter)
+    val task = new Init(dir, reporter, {str: String => StdIn.readLine(str)})
     task.run()
   }
 
   private def backup(dir: File, root: File, cfg: Config) = {
-    val client = new GlacierClient(cfg)
+    val client = new AwsGlacierClient(cfg)
     val vault = client.getVault(cfg.vaultName) getOrElse {
       throw new IllegalStateException(s"Unable to access vault '${cfg.vaultName}'!")
     }
@@ -84,7 +86,7 @@ object Freezer {
   }
 
   private def inventory(cfg: Config) = {
-    val client = new GlacierClient(cfg)
+    val client = new AwsGlacierClient(cfg)
     val vault = client.getVault(cfg.vaultName) getOrElse {
       throw new IllegalStateException(s"Unable to access vault '${cfg.vaultName}'!")
     }
@@ -94,7 +96,7 @@ object Freezer {
   }
 
   private def restore(dir: File, root: File, cfg: Config): Int = {
-    val client = new GlacierClient(cfg)
+    val client = new AwsGlacierClient(cfg)
     val vault = client.getVault(cfg.vaultName).get
 
     val task = new Restore(vault, reporter)

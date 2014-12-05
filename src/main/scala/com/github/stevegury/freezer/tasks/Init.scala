@@ -1,15 +1,18 @@
 package com.github.stevegury.freezer.tasks
 
+import java.net.URL
+
+import com.amazonaws.auth.PropertiesCredentials
 import com.github.stevegury.freezer._
 import java.io.File
 import scala.io.StdIn
 
-class Init(root: File, reporter: String => Unit) {
+class Init(root: File, reporter: String => Unit, stdinReader: String => String) {
   def run(): Int = {
     var cfg = initConfig()
     var isVaultAvailable = false
     while (!isVaultAvailable) {
-      val client = new GlacierClient(cfg)
+      val client = new AwsGlacierClient(cfg)
       val vault = client.getVault(cfg.vaultName)
       if (! vault.isDefined)
         isVaultAvailable = true
@@ -23,19 +26,25 @@ class Init(root: File, reporter: String => Unit) {
 
   def initConfig(): Config = {
     statusDir(root).mkdirs()
-    val cfg = Config(
-      vaultName = readFromStdin("VaultName", root.getName),
-      credentials = readFromStdin("Credential location", defaultCredentialsFilename),
-      endpoint = readFromStdin("Endpoint", defaultEndpoint),
-      exclusions = readFromStdin("Exclusions (comma separated)", ".*\\.DS_Store$").split(",").map(_.r)
-    )
-    val cfgOutput = new File(configDir(root), "config")
-    cfg.save(cfgOutput)
+    val vaultName = readFromStdin("VaultName", root.getName)
+    val credentials = {
+      val creds = readFromStdin("Credential location", defaultCredentialsFilename)
+      new PropertiesCredentials(new File(creds)) // check validity
+      creds
+    }
+    val endpoint = {
+      val url = readFromStdin("Endpoint", defaultEndpoint)
+      new URL(url) // check validity
+      url
+    }
+    val exclusions = readFromStdin("Exclusions (comma separated)", ".*\\.DS_Store$").split(",").map(_.r)
+    val cfg = Config(vaultName, credentials, endpoint, exclusions)
+    cfg.save(new File(configDir(root), "config"))
     cfg
   }
 
   private[this] def readFromStdin(txt: String, default: String) = {
-    val userInput = StdIn.readLine(s"$txt [$default]: ")
+    val userInput = stdinReader(s"$txt [$default]: ")
     if ("" != userInput)
       userInput
     else

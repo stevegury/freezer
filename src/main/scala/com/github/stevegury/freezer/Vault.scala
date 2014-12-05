@@ -28,8 +28,15 @@ case class InventoryRes(
   ArchiveList: Seq[AmazonArchiveInfo]
 )
 
+trait Vault {
+  def getName: String
+  def upload(file: File, hash: String, desc: String): ArchiveInfo
+  def deleteArchive(archiveId: String): Unit
+  def download(root: File, archiveInfos: Seq[ArchiveInfo]): Unit
+  def getInventory: Either[String, Seq[ArchiveInfo]]
+}
 
-class Vault(
+class AwsVault(
   client: AmazonGlacierClient,
   credentials: AWSCredentials,
   val name: String,
@@ -37,7 +44,8 @@ class Vault(
   val inventoryDate: String,
   val numberOfArchive: Long,
   val size: Long,
-  val arn: String) {
+  val arn: String
+) extends Vault{
 
   def this(client: AmazonGlacierClient, credentials: AWSCredentials, desc: DescribeVaultOutput) =
     this(client, credentials, desc.getVaultName, desc.getCreationDate, desc.getLastInventoryDate,
@@ -51,21 +59,23 @@ class Vault(
   }
   private[this] val dateFormat = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss")
 
-  def upload(file: File, hash: String, desc: String) = {
-    //val res = atm.upload(name, desc, file)
+  def getName: String = name
+
+  def upload(file: File, hash: String, desc: String): ArchiveInfo = {
+    val res = atm.upload(name, desc, file)
     val now = new Date
     ArchiveInfo(
-      "",//res.getArchiveId,
+      res.getArchiveId,
       hash,
       desc
     )
   }
 
-  def deleteArchive(archiveId: String) {
-    //client.deleteArchive(new DeleteArchiveRequest(name, archiveId))
+  def deleteArchive(archiveId: String): Unit = {
+    client.deleteArchive(new DeleteArchiveRequest(name, archiveId))
   }
 
-  def download(root: File, archiveInfos: Seq[ArchiveInfo]) = {
+  def download(root: File, archiveInfos: Seq[ArchiveInfo]): Unit = {
     val currentJobIds = listArchiveRetrievalJobs filter {
       job => archiveInfos.map(_.archiveId).contains(job.getArchiveId) }
     val newJobs = archiveInfos filterNot { archiveInfo =>
@@ -94,35 +104,6 @@ class Vault(
     }
   }
 
-  def requestDownload(archiveId: String): String = {
-    val params = new JobParameters(null, "archive-retrieval", archiveId, "TODO:description")
-    val req = new InitiateJobRequest(name, params)
-    client.initiateJob(req).getJobId
-  }
-
-  def downloadToFile(jobId: String, file: File) {
-    file.getParentFile.mkdirs()
-    val res = client.getJobOutput(new GetJobOutputRequest(name, jobId, ""))
-
-    val is = new BufferedInputStream(res.getBody)
-    val os = new BufferedOutputStream(new FileOutputStream(file))
-
-    val buf = new Array[Byte](1024*1024)
-    var n = is.read(buf)
-    while(n > 0) {
-      os.write(buf, 0, n)
-      n = is.read(buf)
-    }
-    is.close()
-    os.close()
-  }
-
-  def listJobs: Seq[GlacierJobDescription] = client.listJobs(new ListJobsRequest(name)).getJobList
-
-  def listInventoryRetrievalJobs = listJobs filter { job => job.getAction == "InventoryRetrieval" }
-
-  def listArchiveRetrievalJobs = listJobs filter { job => job.getAction == "ArchiveRetrieval" }
-
   /**
    * Retrieve the inventory from the AWS server
    * We only allow a max of 1 pending inventory
@@ -140,13 +121,42 @@ class Vault(
     }
   }
 
-  def requestInventory(): String = {
+  private[this] def requestDownload(archiveId: String): String = {
+    val params = new JobParameters(null, "archive-retrieval", archiveId, "TODO:description")
+    val req = new InitiateJobRequest(name, params)
+    client.initiateJob(req).getJobId
+  }
+
+  private[this] def downloadToFile(jobId: String, file: File) {
+    file.getParentFile.mkdirs()
+    val res = client.getJobOutput(new GetJobOutputRequest(name, jobId, ""))
+
+    val is = new BufferedInputStream(res.getBody)
+    val os = new BufferedOutputStream(new FileOutputStream(file))
+
+    val buf = new Array[Byte](1024*1024)
+    var n = is.read(buf)
+    while(n > 0) {
+      os.write(buf, 0, n)
+      n = is.read(buf)
+    }
+    is.close()
+    os.close()
+  }
+
+  private[this] def listJobs: Seq[GlacierJobDescription] = client.listJobs(new ListJobsRequest(name)).getJobList
+
+  private[this] def listInventoryRetrievalJobs = listJobs filter { job => job.getAction == "InventoryRetrieval" }
+
+  private[this] def listArchiveRetrievalJobs = listJobs filter { job => job.getAction == "ArchiveRetrieval" }
+
+  private[this] def requestInventory(): String = {
     val params = new JobParameters("JSON", "inventory-retrieval", null, "desc")
     val req = new InitiateJobRequest(name, params)
     client.initiateJob(req).getJobId
   }
 
-  def retrieveInventory(jobId: String): Seq[ArchiveInfo] = {
+  private[this] def retrieveInventory(jobId: String): Seq[ArchiveInfo] = {
     val res = client.getJobOutput(new GetJobOutputRequest(name, jobId, ""))
     val is = new InputStreamReader(res.getBody())
 
