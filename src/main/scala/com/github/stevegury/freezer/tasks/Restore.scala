@@ -4,26 +4,19 @@ import java.io.File
 
 import com.github.stevegury.freezer.Vault
 
-class Restore(vault: Vault, reporter: String => Unit) {
+class Restore(dir: File, root: File, vault: Vault, now: Boolean, reporter: String => Unit) {
   def run(): Int = {
-//    val root = new File(cfg.path).getParentFile
-//
-//    val newCfg = client.getVault(vaultName) match {
-//      case Some(vault) => vault.getInventory match {
-//        case Right(archiveInfos) =>
-//          vault.download(root, archiveInfos)
-//          cfg.copy(archiveInfos = archiveInfos)
-//        case Left(jobId) =>
-//          println("Restore requested but not yet ready")
-//          println("(please redo this command later)")
-//          cfg
-//      }
-//      case _ =>
-//        println("Can't find vault '%s'".format(vaultName))
-//        cfg
-//    }
-//    newCfg.copy(vaultName = vaultName)
-//    newCfg.save()
-    0
+    // TODO: handle partial restore
+    require(dir.getAbsolutePath == root.getAbsolutePath)
+
+    vault.getInventory(now) match {
+      case Right(archiveInfos) =>
+        val archInfos = archiveInfos.sortBy(_.path)
+        vault.download(dir, archInfos, reporter)
+        0
+      case Left(jobId) =>
+        reporter(s"Inventory in progress (JobID: '$jobId')")
+        1
+    }
   }
 }

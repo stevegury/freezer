@@ -15,8 +15,12 @@ class TestingReporter extends (String => Unit) {
 }
 
 class TestingStdinReader extends (String => String) {
+  var questions = ArrayBuffer.empty[String]
+
   def apply(input: String) = input match {
-    case _ => ""
+    case _ =>
+      questions += input
+      ""
   }
 }
 

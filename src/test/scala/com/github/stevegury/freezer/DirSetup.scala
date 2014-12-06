@@ -10,6 +10,10 @@ trait DirSetup {
   var tmpDir: File = null
 
   protected def initDir(): Unit = {
+    val creds = new File(defaultCredentialsFilename)
+    if (!creds.exists())
+      createFakeCredentials(creds)
+
     val tmp = File.createTempFile("freezer", System.nanoTime.toString.substring(4))
     tmp.delete()
     tmp.mkdir()
@@ -36,5 +40,13 @@ trait DirSetup {
     rng.nextBytes(buffer)
     out.write(buffer)
     out.close()
+  }
+
+  protected def createFakeCredentials(output: File): File = {
+    val out = new FileOutputStream(output)
+    out.write("accessKey = toto\n".getBytes)
+    out.write("secretKey = titi\n".getBytes)
+    output.deleteOnExit()
+    output
   }
 }

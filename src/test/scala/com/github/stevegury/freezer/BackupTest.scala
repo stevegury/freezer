@@ -13,8 +13,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
   before {
     initDir()
     reporter = new TestingReporter
-    val init = new Init(tmpDir, reporter, {str: String => ""})
-    cfg = init.initConfig()
+    cfg = Init.initConfig(tmpDir, {str: String => ""})
   }
 
   after {
@@ -98,6 +97,8 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
     val f3 = new File(tmpDir, "subdir/subdir2/file")
     Seq(f1, f2, f3) foreach { touch }
 
+    val stdinReader = TestingStdinReader.createFromInputs("", "", "", "\\.DS_Store")
+    cfg = Init.initConfig(tmpDir, stdinReader)
     val vault = new TestingVault
     val backup = new Backup(tmpDir, tmpDir, cfg, vault, reporter)
 
@@ -112,8 +113,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
 
     {
       val stdinReader = TestingStdinReader.createFromInputs("", "", "", "\\.DS_Store,to_be_excluded")
-      val init = new Init(tmpDir, reporter, stdinReader)
-      cfg = init.initConfig()
+      cfg = Init.initConfig(tmpDir, stdinReader)
       val backup = new Backup(tmpDir, tmpDir, cfg, vault, reporter) // to reload the cfg
       assert(backup.run() === 0)
 
@@ -128,8 +128,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
 
     {
       val stdinReader = TestingStdinReader.createFromInputs("", "", "", "other")
-      val init = new Init(tmpDir, reporter, stdinReader)
-      cfg = init.initConfig()
+      cfg = Init.initConfig(tmpDir, stdinReader)
       val backup = new Backup(tmpDir, tmpDir, cfg, vault, reporter) // to reload the cfg
       assert(backup.run() === 0)
 
@@ -144,8 +143,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
 
     {
       val stdinReader = TestingStdinReader.createFromInputs("", "", "", "subdir")
-      val init = new Init(tmpDir, reporter, stdinReader)
-      cfg = init.initConfig()
+      cfg = Init.initConfig(tmpDir, stdinReader)
       val backup = new Backup(tmpDir, tmpDir, cfg, vault, reporter) // to reload the cfg
       assert(backup.run() === 0)
 

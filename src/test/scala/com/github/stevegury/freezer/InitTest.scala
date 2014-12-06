@@ -16,10 +16,32 @@ class InitTest extends FunSuite with BeforeAndAfter with DirSetup {
     destroyDir()
   }
 
-  test("Init ask for the right things") {
-    val init = new Init(tmpDir, new TestingReporter, new TestingStdinReader)
-    val cfg = init.initConfig()
+  test("Init doesn't ask anything if info provided") {
+    val stdinReader = new TestingStdinReader
+    val init = new Init(tmpDir, new TestingReporter, stdinReader)
+    val fakeCreds = createFakeCredentials(File.createTempFile("fake-creds", System.currentTimeMillis().toString))
+    val credPath = fakeCreds.getAbsolutePath
+    val cfg = Init.initConfig(
+      tmpDir,
+      stdinReader,
+      Some("myName"),
+      Some(credPath),
+      Some("https://glacier.toto.com"),
+      Some("""target,\.git.*""")
+    )
 
+    assert(stdinReader.questions.size === 0)
+    assert(cfg.vaultName === "myName")
+    assert(cfg.credentials === credPath)
+    assert(cfg.endpoint === "https://glacier.toto.com")
+    assert(cfg.exclusions.map(_.regex) === Seq("target", "\\.git.*"))
+  }
+
+  test("Init ask for the right things") {
+    val stdinReader = new TestingStdinReader
+    val cfg = Init.initConfig(tmpDir, stdinReader)
+
+    assert(stdinReader.questions.size === 4)
     assert(cfg.vaultName === tmpDir.getName)
   }
 
@@ -27,18 +49,16 @@ class InitTest extends FunSuite with BeforeAndAfter with DirSetup {
     val emptyCreds = File.createTempFile("emptyCreds", System.nanoTime.toString)
     val stdinReader = TestingStdinReader.createFromInputs("", emptyCreds.getAbsolutePath, "", "")
 
-    val init = new Init(tmpDir, new TestingReporter, stdinReader)
     intercept[IllegalArgumentException] {
-      init.initConfig()
+      Init.initConfig(tmpDir, stdinReader)
     }
   }
 
   test("Init throw on invalid endpoint") {
     val stdinReader = TestingStdinReader.createFromInputs("", "", "htpp://blabla asdkbjasd", "")
 
-    val init = new Init(tmpDir, new TestingReporter, stdinReader)
     intercept[MalformedURLException] {
-      init.initConfig()
+      Init.initConfig(tmpDir, stdinReader)
     }
   }
 }

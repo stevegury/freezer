@@ -32,8 +32,8 @@ trait Vault {
   def getName: String
   def upload(file: File, hash: String, desc: String): ArchiveInfo
   def deleteArchive(archiveId: String): Unit
-  def download(root: File, archiveInfos: Seq[ArchiveInfo]): Unit
-  def getInventory: Either[String, Seq[ArchiveInfo]]
+  def download(root: File, archiveInfos: Seq[ArchiveInfo], reporter: String => Unit): Unit
+  def getInventory(requestNewInventoy: Boolean): Either[String, Seq[ArchiveInfo]]
 }
 
 class AwsVault(
@@ -75,30 +75,29 @@ class AwsVault(
     client.deleteArchive(new DeleteArchiveRequest(name, archiveId))
   }
 
-  def download(root: File, archiveInfos: Seq[ArchiveInfo]): Unit = {
+  def download(root: File, archiveInfos: Seq[ArchiveInfo], reporter: String => Unit): Unit = {
     val currentJobIds = listArchiveRetrievalJobs filter {
       job => archiveInfos.map(_.archiveId).contains(job.getArchiveId) }
     val newJobs = archiveInfos filterNot { archiveInfo =>
-      currentJobIds.find(_.getArchiveId == archiveInfo.archiveId).isDefined
+      currentJobIds.exists(_.getArchiveId == archiveInfo.archiveId)
     }
     val (completed, inProgress) = currentJobIds partition { _.getCompleted }
 
-    newJobs foreach { info =>
-      val jobId = requestDownload(info.archiveId)
-      println(s"Requesting download for: '${info.archiveId}'")
+    newJobs.sortBy(_.path) foreach { info =>
+      val jobId = requestDownload(info.archiveId, info.path)
+      reporter(s"Requesting download for: '${info.path}'")
       jobId
     }
-    inProgress foreach { jobDesc =>
-      val path = jobDesc.getJobDescription
-      println("Server still preparing download of: '%s'".format(path))
+    inProgress.map(_.getJobDescription).sorted foreach { path =>
+      reporter(s"Server still preparing: '$path'")
     }
-    completed foreach { jobDesc =>
+    completed.sortBy(_.getJobDescription) foreach { jobDesc =>
       val path = jobDesc.getJobDescription
       val output = new File(root, path)
       if (output.exists())
-        println("Skipping '%s' (already present)".format(path))
+        reporter(s"Skipping '$path' (already present)")
       else {
-        println("Downloading '%s'...".format(path))
+        reporter(s"Downloading 'path'...")
         downloadToFile(jobDesc.getJobId, output)
       }
     }
@@ -106,23 +105,30 @@ class AwsVault(
 
   /**
    * Retrieve the inventory from the AWS server
-   * We only allow a max of 1 pending inventory
    * Return either the jobId of the pending or the result Seq[ArchiveInfo]
    */
-  def getInventory: Either[String, Seq[ArchiveInfo]] = {
-    val (completedJobs, jobsInProgress) =
-      listInventoryRetrievalJobs partition { _.getCompleted }
-    require(jobsInProgress.size + completedJobs.size <= 1)
+  def getInventory(now: Boolean): Either[String, Seq[ArchiveInfo]] = {
+    if (now)
+      Left(requestInventory())
+    else {
+      val (completedJobs, jobsInProgress) =
+        listInventoryRetrievalJobs.partition(_.getCompleted)
 
-    (completedJobs, jobsInProgress) match {
-      case (Seq(), Seq()) => Left(requestInventory())
-      case (Seq(), inProgress) => Left(inProgress.head.getJobId)
-      case (completed, _) => Right(retrieveInventory(completed.head.getJobId))
+      (completedJobs, jobsInProgress) match {
+        case (Seq(), Seq()) => Left(requestInventory())
+        case (Seq(), inProgress) =>
+          val latestJob = inProgress.sortBy(_.getCreationDate).last
+          Left(latestJob.getJobId)
+        case (completed, _) => {
+          val latestJob = completed.sortBy(_.getCreationDate).last
+          Right(retrieveInventory(latestJob.getJobId))
+        }
+      }
     }
   }
 
-  private[this] def requestDownload(archiveId: String): String = {
-    val params = new JobParameters(null, "archive-retrieval", archiveId, "TODO:description")
+  private[this] def requestDownload(archiveId: String, path: String): String = {
+    val params = new JobParameters(null, "archive-retrieval", archiveId, path)
     val req = new InitiateJobRequest(name, params)
     client.initiateJob(req).getJobId
   }
@@ -144,11 +150,15 @@ class AwsVault(
     os.close()
   }
 
-  private[this] def listJobs: Seq[GlacierJobDescription] = client.listJobs(new ListJobsRequest(name)).getJobList
+  private[this] def listJobs: Seq[GlacierJobDescription] = {
+    client.listJobs(new ListJobsRequest(name)).getJobList
+  }
 
-  private[this] def listInventoryRetrievalJobs = listJobs filter { job => job.getAction == "InventoryRetrieval" }
+  private[this] def listInventoryRetrievalJobs =
+    listJobs filter { _.getAction == "InventoryRetrieval" }
 
-  private[this] def listArchiveRetrievalJobs = listJobs filter { job => job.getAction == "ArchiveRetrieval" }
+  private[this] def listArchiveRetrievalJobs =
+    listJobs filter { _.getAction == "ArchiveRetrieval" }
 
   private[this] def requestInventory(): String = {
     val params = new JobParameters("JSON", "inventory-retrieval", null, "desc")

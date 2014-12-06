@@ -41,7 +41,7 @@ case class Config(
   vaultName: String,
   credentials: String = defaultCredentialsFilename,
   endpoint: String = defaultEndpoint,
-  exclusions: Seq[Regex] = Seq("\\.DS_Store".r, "\\.git".r)
+  exclusions: Seq[Regex] = Seq.empty
 ) {
   def save(outputFile: File) {
     val p = new Properties()

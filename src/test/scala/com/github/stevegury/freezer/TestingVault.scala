@@ -33,7 +33,8 @@ class TestingVault extends Vault {
     content -= archiveId
   }
 
-  def download(root: File, archiveInfos: Seq[ArchiveInfo]): Unit = synchronized {
+  // TODO: fix the reporter
+  def download(root: File, archiveInfos: Seq[ArchiveInfo], reporter: String => Unit): Unit = synchronized {
     for (info <- archiveInfos) {
       val output = new FileOutputStream(new File(root, info.path))
       val (fileContent, path) = content(info.archiveId)
@@ -43,7 +44,8 @@ class TestingVault extends Vault {
     }
   }
 
-  def getInventory: Either[String, Seq[ArchiveInfo]] = synchronized {
+  def getInventory(requestNewInventory: Boolean): Either[String, Seq[ArchiveInfo]] = synchronized {
+    //TODO: handle requestNewInventory
     jobId match {
       case Some(_) =>
         val archiveInfos = content.toSeq map { case (id, (fileContent, path)) =>
