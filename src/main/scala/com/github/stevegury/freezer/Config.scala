@@ -73,7 +73,7 @@ object Config {
       vaultName = p.getProperty("vaultName"),
       credentials = p.getProperty("credentials"),
       endpoint = p.getProperty("endpoint"),
-      exclusions = p.getProperty("exclusions").split(",").map(_.r)
+      exclusions = p.getProperty("exclusions").split(",").filter(_ != "").map(_.r)
     )
   }
 }

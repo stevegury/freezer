@@ -1,5 +1,3 @@
-import AssemblyKeys._
-
 assemblySettings
 
 name := "freezer"

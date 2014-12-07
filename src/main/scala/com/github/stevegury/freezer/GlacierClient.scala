@@ -64,7 +64,6 @@ class AwsGlacierClient(val credentials: AWSCredentials, val endpoint: String) ex
       Some(new AwsVault(client, credentials, name, creationDate, inventoryDate, numberOfArchive, size, arn))
     } catch {
       case ex: Throwable =>
-        println(ex)
         None
     }
   }

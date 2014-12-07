@@ -27,8 +27,13 @@ class Backup(dir: File, root: File, cfg: Config, vault: Vault, reporter: String 
     if (!dir.exists() || isDirExcluded)
       (Set.empty, Set.empty)
     else {
-      val (files, dirs) = dir.listFiles.partition(_.isFile)
-      (files.map(_.getName).filterNot(fltr).toSet, dirs.map(_.getName).filterNot(fltr).toSet)
+      val list = dir.listFiles
+      if (list == null)
+        (Set.empty, Set.empty)
+      else {
+        val (files, dirs) = list.partition(_.isFile)
+        (files.map(_.getName).filterNot(fltr).toSet, dirs.map(_.getName).filterNot(fltr).toSet)
+      }
     }
   }
 
@@ -59,7 +64,7 @@ class Backup(dir: File, root: File, cfg: Config, vault: Vault, reporter: String 
     //println(s"### potentially modified: $otherFiles")
     //println(s"### nextDirs: $nextDirs")
 
-    newFiles foreach { filename =>
+    newFiles.toSeq.sorted foreach { filename =>
       val f = new File(dir, filename)
       if (f.length() != 0) {
         val relativePath = relativize(root, f)
@@ -68,7 +73,7 @@ class Backup(dir: File, root: File, cfg: Config, vault: Vault, reporter: String 
         upload(f, hash, relativePath)
       }
     }
-    deletedFiles foreach { statusFilename =>
+    deletedFiles.toSeq.sorted foreach { statusFilename =>
       val statusFile = new File(statusDir, statusFilename)
       val relativePath = relativize(rootStatusDir, statusFile)
       val archiveInfo = ArchiveInfo.load(statusFile, relativePath)
@@ -76,7 +81,7 @@ class Backup(dir: File, root: File, cfg: Config, vault: Vault, reporter: String 
       vault.deleteArchive(archiveInfo.archiveId)
       statusFile.delete()
     }
-    otherFiles foreach { case filename =>
+    otherFiles.toSeq.sorted foreach { case filename =>
       val file = new File(dir, filename)
       val relativePath = relativize(root, file)
       val archInfoPath = new File(statusDir, filename)
@@ -98,7 +103,7 @@ class Backup(dir: File, root: File, cfg: Config, vault: Vault, reporter: String 
     }
 
     for {
-      dirName <- nextDirs
+      dirName <- nextDirs.toSeq.sorted
       if !(dirName == configDirname && dir == root) // skip '.freezer' directory in root
       newDir = new File(dir, dirName)
       newStatusDir = new File(statusDir, dirName)

@@ -32,8 +32,14 @@ trait Vault {
   def getName: String
   def upload(file: File, hash: String, desc: String): ArchiveInfo
   def deleteArchive(archiveId: String): Unit
-  def download(root: File, archiveInfos: Seq[ArchiveInfo], reporter: String => Unit): Unit
+  def downloadToFile(jobId: String, output: File): Unit
   def getInventory(requestNewInventoy: Boolean): Either[String, Seq[ArchiveInfo]]
+  def requestDownload(archiveId: String, path: String): String
+  def listJobs: Seq[GlacierJobDescription]
+  def listInventoryRetrievalJobs: Seq[GlacierJobDescription]
+  def listArchiveRetrievalJobs: Seq[GlacierJobDescription]
+  def requestInventory(): String
+  def retrieveInventory(jobId: String): Seq[ArchiveInfo]
 }
 
 class AwsVault(
@@ -127,13 +133,7 @@ class AwsVault(
     }
   }
 
-  private[this] def requestDownload(archiveId: String, path: String): String = {
-    val params = new JobParameters(null, "archive-retrieval", archiveId, path)
-    val req = new InitiateJobRequest(name, params)
-    client.initiateJob(req).getJobId
-  }
-
-  private[this] def downloadToFile(jobId: String, file: File) {
+  def downloadToFile(jobId: String, file: File): Unit = {
     file.getParentFile.mkdirs()
     val res = client.getJobOutput(new GetJobOutputRequest(name, jobId, ""))
 
@@ -150,23 +150,30 @@ class AwsVault(
     os.close()
   }
 
-  private[this] def listJobs: Seq[GlacierJobDescription] = {
-    client.listJobs(new ListJobsRequest(name)).getJobList
+  def requestDownload(archiveId: String, path: String): String = {
+    val params = new JobParameters(null, "archive-retrieval", archiveId, path)
+    val req = new InitiateJobRequest(name, params)
+    client.initiateJob(req).getJobId
   }
 
-  private[this] def listInventoryRetrievalJobs =
+  def listJobs: Seq[GlacierJobDescription] = {
+    val req = new ListJobsRequest(name)
+    client.listJobs(req).getJobList
+  }
+
+  def listInventoryRetrievalJobs =
     listJobs filter { _.getAction == "InventoryRetrieval" }
 
-  private[this] def listArchiveRetrievalJobs =
+  def listArchiveRetrievalJobs =
     listJobs filter { _.getAction == "ArchiveRetrieval" }
 
-  private[this] def requestInventory(): String = {
+  def requestInventory(): String = {
     val params = new JobParameters("JSON", "inventory-retrieval", null, "desc")
     val req = new InitiateJobRequest(name, params)
     client.initiateJob(req).getJobId
   }
 
-  private[this] def retrieveInventory(jobId: String): Seq[ArchiveInfo] = {
+  def retrieveInventory(jobId: String): Seq[ArchiveInfo] = {
     val res = client.getJobOutput(new GetJobOutputRequest(name, jobId, ""))
     val is = new InputStreamReader(res.getBody())
 
@@ -194,6 +201,7 @@ class AwsVault(
     //     }
     //   ]
     // }
+
     jsonReader.readValue(output, classOf[InventoryRes]).ArchiveList map { amazonArchiveInfo =>
       ArchiveInfo(
         amazonArchiveInfo.ArchiveId,

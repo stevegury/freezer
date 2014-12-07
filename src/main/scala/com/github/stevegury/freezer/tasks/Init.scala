@@ -10,19 +10,20 @@ class Init(root: File, reporter: String => Unit, stdinReader: String => String) 
   def run(): Int = {
     statusDir(root).mkdirs()
     var cfg = Init.initConfig(root, stdinReader)
-    cfg.save(new File(configDir(root), "config"))
 
-    var isVaultAvailable = false
-    while (!isVaultAvailable) {
+    var isVaultCreated = false
+    while (!isVaultCreated) {
       val client = new AwsGlacierClient(cfg)
       val vault = client.getVault(cfg.vaultName)
-      if (! vault.isDefined)
-        isVaultAvailable = true
-      else {
+      if (! vault.isDefined) {
+        isVaultCreated = true
+        client.createVault(cfg.vaultName)
+      } else {
         reporter(s"Vault '${cfg.vaultName}' already exists! Try again")
         cfg = Init.initConfig(root, stdinReader)
       }
     }
+    cfg.save(new File(configDir(root), "config"))
     0
   }
 }

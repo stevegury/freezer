@@ -25,7 +25,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
     val backup = new Backup(tmpDir, tmpDir, cfg, vault, reporter)
 
     assert(backup.run() === 0)
-    assert(vault.getContent.isEmpty)
+    assert(vault.getContentPath.isEmpty)
     assert(reporter.getLastMessages.isEmpty)
   }
 
@@ -40,7 +40,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
 
     {
       assert(backup.run() === 0)
-      val paths = vault.getContent.values.map(_._2).toSet
+      val paths = vault.getContentPath.toSet
       val expectedPaths = Set("f1", "d1/f2", "d1/d2/f3")
       assert(expectedPaths === paths)
       val msg = reporter.getLastMessages.toSet
@@ -53,7 +53,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
 
     {
       assert(backup.run() === 0)
-      val paths = vault.getContent.values.map(_._2).toSet
+      val paths = vault.getContentPath.toSet
       val expectedPaths = Set("f1", "d1/f2", "d1/d2/f3")
       assert(expectedPaths === paths)
       val msg = reporter.getLastMessages.toSet
@@ -66,7 +66,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
 
     {
       assert(backup.run() === 0)
-      val paths = vault.getContent.values.map(_._2).toSet
+      val paths = vault.getContentPath.toSet
       val expectedPaths = Set("f1", "d1/d2/f3")
       assert(expectedPaths === paths)
       val msg = reporter.getLastMessages.toSet
@@ -81,7 +81,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
       out.close()
 
       assert(backup.run() === 0)
-      val paths = vault.getContent.values.map(_._2).toSet
+      val paths = vault.getContentPath.toSet
       val expectedPaths = Set("f1")
       assert(expectedPaths === paths)
       val msg = reporter.getLastMessages.toSet
@@ -105,7 +105,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
     // upload everything
     {
       assert(backup.run() === 0)
-      val paths = vault.getContent.values.map(_._2).toSet
+      val paths = vault.getContentPath.toSet
       val expectedPaths = Set("to_be_excluded", "subdir/subdir2/file")
       assert(expectedPaths === paths)
       reporter.clear()
@@ -117,7 +117,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
       val backup = new Backup(tmpDir, tmpDir, cfg, vault, reporter) // to reload the cfg
       assert(backup.run() === 0)
 
-      val paths = vault.getContent.values.map(_._2).toSet
+      val paths = vault.getContentPath.toSet
       val expectedPaths = Set("subdir/subdir2/file")
       assert(expectedPaths === paths)
       val msg = reporter.getLastMessages.toSet
@@ -132,7 +132,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
       val backup = new Backup(tmpDir, tmpDir, cfg, vault, reporter) // to reload the cfg
       assert(backup.run() === 0)
 
-      val paths = vault.getContent.values.map(_._2).toSet
+      val paths = vault.getContentPath.toSet
       val expectedPaths = Set(".DS_Store", "to_be_excluded", "subdir/subdir2/file")
       assert(expectedPaths === paths)
       val msg = reporter.getLastMessages.toSet
@@ -147,7 +147,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
       val backup = new Backup(tmpDir, tmpDir, cfg, vault, reporter) // to reload the cfg
       assert(backup.run() === 0)
 
-      val paths = vault.getContent.values.map(_._2).toSet
+      val paths = vault.getContentPath.toSet
       val expectedPaths = Set(".DS_Store", "to_be_excluded")
       assert(expectedPaths === paths)
       val msg = reporter.getLastMessages.toSet

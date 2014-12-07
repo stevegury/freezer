@@ -44,7 +44,7 @@ object Freezer {
   private val reporter: String => Unit = Console.out.println
   private def stdinReader(str: String): String = StdIn.readLine(str)
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = try {
     val dir = new File(".").getAbsoluteFile.getParentFile
     val (commands, opts) = parseOptions(args)
 
@@ -77,6 +77,11 @@ object Freezer {
     }
 
     System.exit(exitCode)
+  } catch {
+    case ex: Throwable =>
+      reporter(s"Unexpected error: ${ex.getMessage}")
+      ex.printStackTrace()
+      System.exit(Int.MinValue)
   }
 
   private[freezer] def parseOptions(args: Array[String]): (List[String], Map[String, String]) = {
