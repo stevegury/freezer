@@ -3,7 +3,7 @@ package com.github.stevegury.freezer
 import com.github.stevegury.freezer.tasks.{Restore, Inventory, Init, Backup}
 import java.io.File
 
-import scala.collection.mutable
+import scala.collection._
 import scala.io.StdIn
 
 object Freezer {
@@ -30,6 +30,10 @@ object Freezer {
       case "backup" =>
         "Usage: fz backup\n" +
         "  "
+
+      case "inventory" =>
+        "Usage: fz inventory\n" +
+        "  "
       // TODO: Continue
       case _ => s"unknown command '$command'"
     }
@@ -38,6 +42,7 @@ object Freezer {
   }
 
   private val reporter: String => Unit = Console.out.println
+  private def stdinReader(str: String): String = StdIn.readLine(str)
 
   def main(args: Array[String]) {
     val dir = new File(".").getAbsoluteFile.getParentFile
@@ -62,33 +67,10 @@ object Freezer {
 
       case ("restore" :: xs, None) =>
         val optName = xs.headOption orElse opts.get("name")
-        val alreadyPresentCfg = optName flatMap { name =>
-          val configFile = new File(configDir(new File(dir, name)), "config")
-          if (configFile.exists())
-            Some(Config.load(configFile))
-          else
-            None
-        }
-        val cfg = alreadyPresentCfg getOrElse {
-          Init.initConfig(
-          dir,
-          { str: String => StdIn.readLine(str) },
-          optName,
-          opts.get("creds"),
-          opts.get("endpoint"),
-          opts.get("exclusions")
-          )
-        }
-
-        val restoreDir = new File(dir, cfg.vaultName)
-        restoreDir.mkdir()
-        statusDir(restoreDir).mkdirs()
-        cfg.save(new File(configDir(restoreDir), "config"))
-
-        restore(restoreDir, restoreDir, cfg, opts.contains("now"))
+        restore(dir, dir, optName, opts)
       case ("restore" :: Nil, Some((root, cfg))) =>
         // TODO: handle partial restore
-        restore(dir, root, cfg, opts.contains("now"))
+        restore(dir, root, opts.get("name"), opts)
 
       case ("help" :: what :: rest, _) => help(what)
       case _ => help()
@@ -97,7 +79,7 @@ object Freezer {
     System.exit(exitCode)
   }
 
-  private[freezer] def parseOptions(args: Array[String]): (List[String], collection.Map[String, String]) = {
+  private[freezer] def parseOptions(args: Array[String]): (List[String], Map[String, String]) = {
     val commands = mutable.ArrayBuffer.empty[String]
     val options = mutable.Map.empty[String, String]
 
@@ -146,7 +128,7 @@ object Freezer {
   }
 
   private def init(dir: File) = {
-    val task = new Init(dir, reporter, {str: String => StdIn.readLine(str)})
+    val task = new Init(dir, reporter, stdinReader)
     task.run()
   }
 
@@ -170,11 +152,36 @@ object Freezer {
     task.run()
   }
 
-  private def restore(dir: File, root: File, cfg: Config, now: Boolean): Int = {
+  private def restore(dir: File, root: File, optName: Option[String], opts: Map[String, String]): Int = {
+    // check is the subdirectory has already been initialized
+    val alreadyPresentCfg = optName flatMap { name =>
+      val configFile = new File(configDir(new File(dir, name)), "config")
+      if (configFile.exists())
+        Some(Config.load(configFile))
+      else
+        None
+    }
+
+    val cfg = alreadyPresentCfg getOrElse {
+      // If not initialize it
+      val cfg = Init.initConfig(dir, stdinReader,
+        optName,
+        opts.get("creds"),
+        opts.get("endpoint"),
+        opts.get("exclusions")
+      )
+      val restoreDir = new File(dir, cfg.vaultName)
+      restoreDir.mkdir()
+      statusDir(restoreDir).mkdirs()
+      cfg.save(new File(configDir(restoreDir), "config"))
+      cfg
+    }
+
+    val restoreDir = new File(dir, cfg.vaultName)
     val client = new AwsGlacierClient(cfg)
     val vault = client.getVault(cfg.vaultName).get
 
-    val task = new Restore(dir, root, vault, now, reporter)
+    val task = new Restore(restoreDir, restoreDir, vault, opts.contains("now"), reporter)
     task.run()
   }
 }

@@ -10,6 +10,7 @@ case class ArchiveInfo(
   path: String // not saved to file
 ) {
   def save(outputFile: File) {
+    outputFile.getParentFile.mkdirs()
     val p = new Properties()
     p.setProperty("archiveId", archiveId)
     p.setProperty("hash", hash)

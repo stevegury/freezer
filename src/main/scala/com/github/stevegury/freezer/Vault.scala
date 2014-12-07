@@ -97,7 +97,7 @@ class AwsVault(
       if (output.exists())
         reporter(s"Skipping '$path' (already present)")
       else {
-        reporter(s"Downloading 'path'...")
+        reporter(s"Downloading '$path'...")
         downloadToFile(jobDesc.getJobId, output)
       }
     }
