@@ -1,15 +1,21 @@
 package com.github.stevegury.freezer.tasks
 
-import java.net.URL
-
 import com.amazonaws.auth.PropertiesCredentials
 import com.github.stevegury.freezer._
 import java.io.File
+import java.net.URL
+import scala.collection.Map
 
-class Init(root: File, reporter: String => Unit, stdinReader: String => String) {
+class Init(
+   root: File,
+   opts: Map[String, String],
+   reporter: String => Unit,
+   stdinReader: String => String
+) {
+
   def run(): Int = {
     statusDir(root).mkdirs()
-    var cfg = Init.initConfig(root, stdinReader)
+    var cfg = Init.initConfig(root, stdinReader, opts)
 
     var isVaultCreated = false
     while (!isVaultCreated) {
@@ -29,6 +35,21 @@ class Init(root: File, reporter: String => Unit, stdinReader: String => String) 
 }
 
 object Init {
+
+  def initConfig(
+    currentDir: File,
+    stdinReader: String => String,
+    opts: Map[String, String]
+  ): Config = {
+    Init.initConfig(
+      currentDir,
+      stdinReader,
+      opts.get("name"),
+      opts.get("creds"),
+      opts.get("endpoint"),
+      opts.get("exclusions")
+    )
+  }
 
   /**
    * Create a Config instance.

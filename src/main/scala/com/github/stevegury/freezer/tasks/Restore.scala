@@ -6,14 +6,11 @@ import com.amazonaws.services.glacier.TreeHashGenerator._
 import com.github.stevegury.freezer._
 import com.github.stevegury.freezer.Vault
 
-class Restore(dir: File, root: File, vault: Vault, now: Boolean, reporter: String => Unit) {
-  require(dir.getAbsolutePath == root.getAbsolutePath)
+class Restore(root: File, vault: Vault, reporter: String => Unit) {
   private[this] val statusRoot = statusDir(root)
 
   def run(): Int = {
-    // TODO: handle partial restore
-
-    vault.getInventory(now) match {
+    vault.getInventory match {
       case Right(archiveInfos) =>
         download(archiveInfos)
       case Left(jobId) =>

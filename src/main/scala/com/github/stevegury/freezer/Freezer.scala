@@ -26,31 +26,38 @@ object Freezer {
     val msg = command.toLowerCase match {
       case "init" =>
         "Usage: fz init\n" +
-        "  Initialize the current directory as a freezer backup.\n" +
-        "  This will create a '.freezer' directory."
+        "    Initialize the current directory as a freezer backup.\n" +
+        "    This will create a '.freezer' directory.\n" +
+        "    By default fz will interactively ask you some parameters but you can also\n" +
+        "    specify those on the command line:\n" +
+        "      --name <vault-name>\n" +
+        "      --creds <credential file> (default: ~/aws.glacier.credentials)\n" +
+        "      --endpoint <url> (default: https://glacier.us-east-1.amazonaws.com)\n" +
+        "      --exclusions <regex1,regex2> (comma separated regexes of exclusions)\n"
 
       case "backup" =>
         "Usage: fz backup\n" +
-        "  Scan the current directory (and subdirectories), and upload/update/delete\n" +
-        "  the files associated in the AWS Glacier vault."
+        "    Scan the current directory (and subdirectories), and upload/update/delete\n" +
+        "    the files associated in the AWS Glacier vault.\n" +
+        "    All the Files and directories that match the exclusion pattern won't be backup-ed."
 
       case "inventory" =>
         "Usage: fz inventory\n" +
-        "  Request an inventory of the AWS Glacier vault associated with the current\n" +
-        "  directory.\n" +
-        "  The inventory usually takes about 4 hours to complete, in the meantime all\n" +
-        "  subsequent call will return the AWS job-id of the inventory request.\n" +
-        "  If the vault has just been created, you need to wait first for AWS to generate\n" +
-        "  the initial inventory (it usually takes ~24 hours)."
+        "    Request an inventory of the AWS Glacier vault associated with the current\n" +
+        "    directory.\n" +
+        "    The inventory usually takes about 4 hours to complete, in the meantime all\n" +
+        "    subsequent call will return the AWS job-id of the inventory request.\n" +
+        "    If the vault has just been created, you need to wait first for AWS to generate\n" +
+        "    the initial inventory (it usually takes ~24 hours)."
 
       case "restore" =>
         "Usage: fz restore <vault-name>\n" +
-        "  Create a 'vault-name' subdirectory and restore the vault in it.\n" +
-        "  This happen in two steps, the first step is to request an inventory (which\n" +
-        "  takes ~4 hours), then create one archive-retrieval request per file (which takes\n" +
-        "  ~4 hours to complete).\n" +
-        "  If the vault has just been created, you need to wait first for AWS to generate\n" +
-        "  the initial inventory (it usually takes ~24 hours)."
+        "    Create a 'vault-name' subdirectory and restore the vault in it.\n" +
+        "    This happen in two steps, the first step is to request an inventory (which\n" +
+        "    takes ~4 hours), then create one archive-retrieval request per file (which takes\n" +
+        "    ~4 hours to complete).\n" +
+        "    If the vault has just been created, you need to wait first for AWS to generate\n" +
+        "    the initial inventory (it usually takes ~24 hours)."
 
       case _ => s"unknown command '$command'"
     }
@@ -70,7 +77,7 @@ object Freezer {
       case ("init" :: Nil, Some(_)) =>
         error("init", "Already a freezer directory!")
       case ("init" :: Nil, None) =>
-        init(dir)
+        init(dir, opts)
 
       case ("backup" :: Nil, None) =>
         error("backup", "Not a freezer directory! Use 'init' command to initialize a freezer directory.")
@@ -80,16 +87,15 @@ object Freezer {
       case ("inventory" :: Nil, None) =>
         error("inventory", "Not a freezer directory! Use 'init' command to initialize a freezer directory.")
       case ("inventory" :: Nil, Some((root, cfg))) =>
-        inventory(cfg, opts.contains("now"))
+        inventory(cfg)
 
       case ("restore" :: xs, None) =>
         val optName = xs.headOption orElse opts.get("name")
-        restore(dir, dir, optName, opts)
+        restore(dir, optName, opts)
       case ("restore" :: Nil, Some((root, cfg))) =>
-        // TODO: handle partial restore
-        restore(dir, root, opts.get("name"), opts)
+        restore(root, opts.get("name"), opts)
 
-      case ("help" :: what :: rest, _) => help(what)
+      case ("help" :: cmd :: rest, _) => help(cmd)
       case _ => help()
     }
 
@@ -149,8 +155,8 @@ object Freezer {
     -1
   }
 
-  private def init(dir: File) = {
-    val task = new Init(dir, reporter, stdinReader)
+  private def init(dir: File, opts: Map[String, String]) = {
+    val task = new Init(dir, opts, reporter, stdinReader)
     task.run()
   }
 
@@ -164,17 +170,17 @@ object Freezer {
     task.run()
   }
 
-  private def inventory(cfg: Config, now: Boolean) = {
+  private def inventory(cfg: Config) = {
     val client = new AwsGlacierClient(cfg)
     val vault = client.getVault(cfg.vaultName) getOrElse {
       throw new IllegalStateException(s"Unable to access vault '${cfg.vaultName}'!")
     }
 
-    val task = new Inventory(vault, now, reporter)
+    val task = new Inventory(vault, reporter)
     task.run()
   }
 
-  private def restore(dir: File, root: File, optName: Option[String], opts: Map[String, String]): Int = {
+  private def restore(dir: File, optName: Option[String], opts: Map[String, String]): Int = {
     // check is the subdirectory has already been initialized
     val alreadyPresentCfg = optName flatMap { name =>
       val configFile = new File(configDir(new File(dir, name)), "config")
@@ -203,7 +209,7 @@ object Freezer {
     val client = new AwsGlacierClient(cfg)
     val vault = client.getVault(cfg.vaultName).get
 
-    val task = new Restore(restoreDir, restoreDir, vault, opts.contains("now"), reporter)
+    val task = new Restore(restoreDir, vault, reporter)
     task.run()
   }
 }

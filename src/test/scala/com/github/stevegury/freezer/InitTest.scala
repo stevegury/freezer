@@ -18,7 +18,7 @@ class InitTest extends FunSuite with BeforeAndAfter with DirSetup {
 
   test("Init doesn't ask anything if info provided") {
     val stdinReader = new TestingStdinReader
-    val init = new Init(tmpDir, new TestingReporter, stdinReader)
+    val init = new Init(tmpDir, Map.empty, new TestingReporter, stdinReader)
     val fakeCreds = createFakeCredentials(File.createTempFile("fake-creds", System.currentTimeMillis().toString))
     val credPath = fakeCreds.getAbsolutePath
     val cfg = Init.initConfig(

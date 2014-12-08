@@ -33,7 +33,7 @@ trait Vault {
   def upload(file: File, hash: String, desc: String): ArchiveInfo
   def deleteArchive(archiveId: String): Unit
   def downloadToFile(jobId: String, output: File): Unit
-  def getInventory(requestNewInventoy: Boolean): Either[String, Seq[ArchiveInfo]]
+  def getInventory: Either[String, Seq[ArchiveInfo]]
   def requestDownload(archiveId: String, path: String): String
   def listJobs: Seq[GlacierJobDescription]
   def listInventoryRetrievalJobs: Seq[GlacierJobDescription]
@@ -113,22 +113,18 @@ class AwsVault(
    * Retrieve the inventory from the AWS server
    * Return either the jobId of the pending or the result Seq[ArchiveInfo]
    */
-  def getInventory(now: Boolean): Either[String, Seq[ArchiveInfo]] = {
-    if (now)
-      Left(requestInventory())
-    else {
-      val (completedJobs, jobsInProgress) =
-        listInventoryRetrievalJobs.partition(_.getCompleted)
+  def getInventory: Either[String, Seq[ArchiveInfo]] = {
+    val (completedJobs, jobsInProgress) =
+      listInventoryRetrievalJobs.partition(_.getCompleted)
 
-      (completedJobs, jobsInProgress) match {
-        case (Seq(), Seq()) => Left(requestInventory())
-        case (Seq(), inProgress) =>
-          val latestJob = inProgress.sortBy(_.getCreationDate).last
-          Left(latestJob.getJobId)
-        case (completed, _) => {
-          val latestJob = completed.sortBy(_.getCreationDate).last
-          Right(retrieveInventory(latestJob.getJobId))
-        }
+    (completedJobs, jobsInProgress) match {
+      case (Seq(), Seq()) => Left(requestInventory())
+      case (Seq(), inProgress) =>
+        val latestJob = inProgress.sortBy(_.getCreationDate).last
+        Left(latestJob.getJobId)
+      case (completed, _) => {
+        val latestJob = completed.sortBy(_.getCreationDate).last
+        Right(retrieveInventory(latestJob.getJobId))
       }
     }
   }
