@@ -82,7 +82,7 @@ object Freezer {
       case ("backup" :: Nil, None) =>
         error("backup", "Not a freezer directory! Use 'init' command to initialize a freezer directory.")
       case ("backup" :: Nil, Some((root, cfg))) =>
-        backup(dir, root, cfg)
+        backup(root, cfg)
 
       case ("inventory" :: Nil, None) =>
         error("inventory", "Not a freezer directory! Use 'init' command to initialize a freezer directory.")
@@ -160,13 +160,13 @@ object Freezer {
     task.run()
   }
 
-  private def backup(dir: File, root: File, cfg: Config) = {
+  private def backup(root: File, cfg: Config) = {
     // TODO: creating the client could be defer inside backup
     val client = new AwsGlacierClient(cfg)
     val vault = client.getVault(cfg.vaultName) getOrElse {
       throw new IllegalStateException(s"Unable to access vault '${cfg.vaultName}'!")
     }
-    val task = new Backup(dir, root, cfg, vault, reporter)
+    val task = new Backup(root, cfg, vault, reporter)
     task.run()
   }
 

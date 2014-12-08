@@ -22,7 +22,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
 
   test("Backup on empty directory does nothing") {
     val vault = new TestingVault
-    val backup = new Backup(tmpDir, tmpDir, cfg, vault, reporter)
+    val backup = new Backup(tmpDir, cfg, vault, reporter)
 
     assert(backup.run() === 0)
     assert(vault.getContentPath.isEmpty)
@@ -36,7 +36,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
     Seq(f1, f2, f3) foreach { touch }
 
     val vault = new TestingVault
-    val backup = new Backup(tmpDir, tmpDir, cfg, vault, reporter)
+    val backup = new Backup(tmpDir, cfg, vault, reporter)
 
     {
       assert(backup.run() === 0)
@@ -100,7 +100,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
     val stdinReader = TestingStdinReader.createFromInputs("", "", "", "\\.DS_Store")
     cfg = Init.initConfig(tmpDir, stdinReader)
     val vault = new TestingVault
-    val backup = new Backup(tmpDir, tmpDir, cfg, vault, reporter)
+    val backup = new Backup(tmpDir, cfg, vault, reporter)
 
     // upload everything
     {
@@ -114,7 +114,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
     {
       val stdinReader = TestingStdinReader.createFromInputs("", "", "", "\\.DS_Store,to_be_excluded")
       cfg = Init.initConfig(tmpDir, stdinReader)
-      val backup = new Backup(tmpDir, tmpDir, cfg, vault, reporter) // to reload the cfg
+      val backup = new Backup(tmpDir, cfg, vault, reporter) // to reload the cfg
       assert(backup.run() === 0)
 
       val paths = vault.getContentPath.toSet
@@ -129,7 +129,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
     {
       val stdinReader = TestingStdinReader.createFromInputs("", "", "", "other")
       cfg = Init.initConfig(tmpDir, stdinReader)
-      val backup = new Backup(tmpDir, tmpDir, cfg, vault, reporter) // to reload the cfg
+      val backup = new Backup(tmpDir, cfg, vault, reporter) // to reload the cfg
       assert(backup.run() === 0)
 
       val paths = vault.getContentPath.toSet
@@ -144,7 +144,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
     {
       val stdinReader = TestingStdinReader.createFromInputs("", "", "", "subdir")
       cfg = Init.initConfig(tmpDir, stdinReader)
-      val backup = new Backup(tmpDir, tmpDir, cfg, vault, reporter) // to reload the cfg
+      val backup = new Backup(tmpDir, cfg, vault, reporter) // to reload the cfg
       assert(backup.run() === 0)
 
       val paths = vault.getContentPath.toSet

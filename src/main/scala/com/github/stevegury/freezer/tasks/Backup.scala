@@ -7,7 +7,7 @@ import java.io.File
 import scala.collection._
 import scala.util.matching.Regex
 
-class Backup(dir: File, root: File, cfg: Config, vault: Vault, reporter: String => Unit) {
+class Backup(root: File, cfg: Config, vault: Vault, reporter: String => Unit) {
 
   private[this] val rootStatusDir = statusDir(root)
   private[this] val exclusions = cfg.exclusions
@@ -122,10 +122,9 @@ class Backup(dir: File, root: File, cfg: Config, vault: Vault, reporter: String 
   }
 
   def run(): Int = {
-    if (! rootStatusDir.exists())
-      rootStatusDir.mkdirs()
+    rootStatusDir.mkdirs()
 
-    if (loop(dir, rootStatusDir) == 0)
+    if (loop(root, rootStatusDir) == 0)
       reporter("Everything up-to-date.")
     0
   }
