@@ -15,13 +15,15 @@ object Freezer {
     println("  backup     Backup the current directory (recursively).")
     println("  inventory  List the current (remote) state of the vault.")
     println("  restore    Restore the vault into the current directory.")
+    println("  help <cmd> Provide more info .")
+    println("  help       This message.")
     println("")
     println("See 'fz help <command>' to read about a specific command.")
     -1
   }
 
   def help(command: String): Int = {
-    val msg = command match {
+    val msg = command.toLowerCase match {
       case "init" =>
         "Usage: fz init\n" +
         "  Initialize the current directory as a freezer backup.\n" +
@@ -29,12 +31,27 @@ object Freezer {
 
       case "backup" =>
         "Usage: fz backup\n" +
-        "  "
+        "  Scan the current directory (and subdirectories), and upload/update/delete\n" +
+        "  the files associated in the AWS Glacier vault."
 
       case "inventory" =>
         "Usage: fz inventory\n" +
-        "  "
-      // TODO: Continue
+        "  Request an inventory of the AWS Glacier vault associated with the current\n" +
+        "  directory.\n" +
+        "  The inventory usually takes about 4 hours to complete, in the meantime all\n" +
+        "  subsequent call will return the AWS job-id of the inventory request.\n" +
+        "  If the vault has just been created, you need to wait first for AWS to generate\n" +
+        "  the initial inventory (it usually takes ~24 hours)."
+
+      case "restore" =>
+        "Usage: fz restore <vault-name>\n" +
+        "  Create a 'vault-name' subdirectory and restore the vault in it.\n" +
+        "  This happen in two steps, the first step is to request an inventory (which\n" +
+        "  takes ~4 hours), then create one archive-retrieval request per file (which takes\n" +
+        "  ~4 hours to complete).\n" +
+        "  If the vault has just been created, you need to wait first for AWS to generate\n" +
+        "  the initial inventory (it usually takes ~24 hours)."
+
       case _ => s"unknown command '$command'"
     }
     println(msg)

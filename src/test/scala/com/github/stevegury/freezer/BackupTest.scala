@@ -26,7 +26,7 @@ class BackupTest extends FunSuite with BeforeAndAfter with DirSetup {
 
     assert(backup.run() === 0)
     assert(vault.getContentPath.isEmpty)
-    assert(reporter.getLastMessages.isEmpty)
+    assert(reporter.getLastMessages.head === "Everything up-to-date.")
   }
 
   test("Backup on non-empty directory does the right thing") {

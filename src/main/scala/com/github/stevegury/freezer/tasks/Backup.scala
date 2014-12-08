@@ -48,7 +48,13 @@ class Backup(dir: File, root: File, cfg: Config, vault: Vault, reporter: String 
     archInfo
   }
 
-  private[this] def loop(dir: File, statusDir: File) {
+  /**
+   * Scan the directory and its children, and upload/delete files based on their
+   * content and based on the status archiveInfo file (present in the .freezer/status dir)
+   * @return the number of actions taken
+   */
+  private[this] def loop(dir: File, statusDir: File): Int = {
+    var action = 0
 
     val (files, subdirs) = filterSubfiles(dir, exclusions)
     val (statuses, statusSubdirs) = filterSubfiles(statusDir, Seq.empty)
@@ -58,12 +64,6 @@ class Backup(dir: File, root: File, cfg: Config, vault: Vault, reporter: String 
     val otherFiles = files -- newFiles
     val nextDirs = subdirs ++ statusSubdirs
 
-    //println(s"### loop in $dir")
-    //println(s"### new: $newFiles")
-    //println(s"### deleted: $deletedFiles")
-    //println(s"### potentially modified: $otherFiles")
-    //println(s"### nextDirs: $nextDirs")
-
     newFiles.toSeq.sorted foreach { filename =>
       val f = new File(dir, filename)
       if (f.length() != 0) {
@@ -71,6 +71,7 @@ class Backup(dir: File, root: File, cfg: Config, vault: Vault, reporter: String 
         val hash = calculateTreeHash(f)
         reporter(s"Uploading new file: $relativePath")
         upload(f, hash, relativePath)
+        action += 1
       }
     }
     deletedFiles.toSeq.sorted foreach { statusFilename =>
@@ -80,6 +81,7 @@ class Backup(dir: File, root: File, cfg: Config, vault: Vault, reporter: String 
       reporter(s"Removing deleted file: $relativePath")
       vault.deleteArchive(archiveInfo.archiveId)
       statusFile.delete()
+      action += 1
     }
     otherFiles.toSeq.sorted foreach { case filename =>
       val file = new File(dir, filename)
@@ -90,6 +92,7 @@ class Backup(dir: File, root: File, cfg: Config, vault: Vault, reporter: String 
         reporter(s"Removing zero-byte file: $relativePath")
         vault.deleteArchive(oldArchiveInfo.archiveId)
         archInfoPath.delete()
+        action += 1
       } else {
         val hash = calculateTreeHash(file)
         if (hash != oldArchiveInfo.hash) {
@@ -98,6 +101,7 @@ class Backup(dir: File, root: File, cfg: Config, vault: Vault, reporter: String 
           val newArchiveInfo = vault.upload(file, hash, relativePath)
           newArchiveInfo.save(archInfoPath)
           vault.deleteArchive(oldArchiveInfo.archiveId)
+          action += 1
         }
       }
     }
@@ -107,18 +111,22 @@ class Backup(dir: File, root: File, cfg: Config, vault: Vault, reporter: String 
       if !(dirName == configDirname && dir == root) // skip '.freezer' directory in root
       newDir = new File(dir, dirName)
       newStatusDir = new File(statusDir, dirName)
-    } loop(newDir, newStatusDir)
+    } {
+      action += loop(newDir, newStatusDir)
+    }
 
     // Deleted empty status directories
     if (statusDir.exists() && statusDir.listFiles().isEmpty)
       statusDir.delete()
+    action
   }
 
   def run(): Int = {
     if (! rootStatusDir.exists())
       rootStatusDir.mkdirs()
 
-    loop(dir, rootStatusDir)
+    if (loop(dir, rootStatusDir) == 0)
+      reporter("Everything up-to-date.")
     0
   }
 }
