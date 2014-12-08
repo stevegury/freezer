@@ -1,11 +1,9 @@
 package com.github.stevegury.freezer
 
-import java.io.File
-
 import com.amazonaws.auth.{PropertiesCredentials, AWSCredentials}
 import com.amazonaws.services.glacier.AmazonGlacierClient
-import com.amazonaws.services.glacier.model.{DescribeVaultRequest, CreateVaultRequest, DeleteVaultRequest, ListVaultsRequest}
-
+import com.amazonaws.services.glacier.model.{DescribeVaultRequest, CreateVaultRequest, ListVaultsRequest}
+import java.io.File
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 
