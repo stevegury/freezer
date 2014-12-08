@@ -10,15 +10,18 @@ import com.amazonaws.services.glacier.TreeHashGenerator._
 class TestingVault extends Vault {
   private[this] val rng = new Random()
   private[this] val content = mutable.Map.empty[String, (Array[Byte], ArchiveInfo)]
-  private[this] var jobId: Option[String] = None
 
+  private[this] var i = 0
   private[this] val inventoryRetrievalJobs = mutable.Map.empty[String, GlacierJobDescription]
   private[this] val archiveRetrievalJobs = mutable.Map.empty[String, GlacierJobDescription]
 
   private[freezer] def getContentPath = synchronized {
     content.toSeq map { case (_, (_, archiveInfo)) => archiveInfo.path }
   }
-  private[freezer] def getCurrentJobId = synchronized { jobId }
+  private[freezer] def deleteAllJobs() = synchronized {
+    inventoryRetrievalJobs.clear()
+    archiveRetrievalJobs.clear()
+  }
 
   def getName: String = "TestingVault"
 
@@ -53,6 +56,7 @@ class TestingVault extends Vault {
   }
 
   def downloadToFile(jobId: String, output: File): Unit = {
+    output.getParentFile.mkdirs()
     val desc = archiveRetrievalJobs(jobId)
     val (data, archInfo) = content(desc.getArchiveId)
     val out = new FileOutputStream(output)
@@ -62,9 +66,16 @@ class TestingVault extends Vault {
 
   def requestDownload(archiveId: String, path: String): String = {
     val jobId = rng.nextInt().toString
+    val (data, archInfo) = content(archiveId)
     val jobDesc = new GlacierJobDescription()
       .withArchiveId(archiveId)
       .withJobId(jobId)
+      .withCreationDate(s"2012-0$i-20T17:03:43.221Z")
+      .withCompleted(true)
+      .withAction("ArchiveRetrieval")
+      .withJobDescription(path)
+      .withArchiveSHA256TreeHash(archInfo.hash)
+    i += 1
     archiveRetrievalJobs += jobId -> jobDesc
     jobId
   }
@@ -80,6 +91,10 @@ class TestingVault extends Vault {
     val jobId = rng.nextInt().toString
     val jobDesc = new GlacierJobDescription()
       .withJobId(jobId)
+      .withCreationDate(s"2012-0$i-20T17:03:43.221Z")
+      .withCompleted(true)
+      .withAction("InventoryRetrieval")
+    i += 1
 
     inventoryRetrievalJobs += jobId -> jobDesc
     jobId
@@ -92,14 +107,12 @@ class TestingVault extends Vault {
 
   def getInventory(now: Boolean): Either[String, Seq[ArchiveInfo]] = synchronized {
     //TODO: handle `now`
-    jobId match {
-      case Some(id) =>
+    inventoryRetrievalJobs.headOption match {
+      case Some((id, _)) =>
         val archiveInfos = retrieveInventory(id)
-        jobId = None
         Right(archiveInfos)
       case None =>
-        val id = rng.nextInt().toString
-        jobId = Some(id)
+        val id = requestInventory()
         Left(id)
     }
   }

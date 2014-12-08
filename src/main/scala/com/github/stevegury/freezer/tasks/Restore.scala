@@ -18,11 +18,11 @@ class Restore(dir: File, root: File, vault: Vault, now: Boolean, reporter: Strin
         download(archiveInfos)
       case Left(jobId) =>
         reporter(s"Inventory in progress (JobID: '$jobId')")
-        1
     }
+    0
   }
 
-  private[this] def download(archiveInfos: Seq[ArchiveInfo]): Int = {
+  private[this] def download(archiveInfos: Seq[ArchiveInfo]): Unit = {
     val allJobId = vault.listArchiveRetrievalJobs filter {
       job => archiveInfos.map(_.archiveId).contains(job.getArchiveId)
     }
@@ -69,6 +69,5 @@ class Restore(dir: File, root: File, vault: Vault, now: Boolean, reporter: Strin
         archiveInfo.save(new File(statusRoot, path))
       }
     }
-    0
   }
 }
