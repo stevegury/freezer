@@ -4,6 +4,8 @@ import com.amazonaws.services.glacier.TreeHashGenerator._
 import com.github.stevegury.freezer.Path.relativize
 import com.github.stevegury.freezer._
 import java.io.File
+import sun.misc.{Signal, SignalHandler}
+
 import scala.collection._
 import scala.util.matching.Regex
 
@@ -11,6 +13,7 @@ class Backup(root: File, cfg: Config, vault: Vault, reporter: String => Unit) {
 
   private[this] val rootStatusDir = statusDir(root)
   private[this] val exclusions = cfg.exclusions
+  @volatile private[this] var quit = false
 
   // Return (filenames, dirnames) in `dir` that aren't excluded by the regex
   // Also check that no parent directory has been excluded (in order to remove file when updating the exclusion)
@@ -65,6 +68,7 @@ class Backup(root: File, cfg: Config, vault: Vault, reporter: String => Unit) {
     val nextDirs = subdirs ++ statusSubdirs
 
     newFiles.toSeq.sorted foreach { filename =>
+      if (quit) return action
       val f = new File(dir, filename)
       if (f.length() != 0) {
         val relativePath = relativize(root, f)
@@ -75,6 +79,7 @@ class Backup(root: File, cfg: Config, vault: Vault, reporter: String => Unit) {
       }
     }
     deletedFiles.toSeq.sorted foreach { statusFilename =>
+      if (quit) return action
       val statusFile = new File(statusDir, statusFilename)
       val relativePath = relativize(rootStatusDir, statusFile)
       val archiveInfo = ArchiveInfo.load(statusFile, relativePath)
@@ -84,6 +89,7 @@ class Backup(root: File, cfg: Config, vault: Vault, reporter: String => Unit) {
       action += 1
     }
     otherFiles.toSeq.sorted foreach { case filename =>
+      if (quit) return action
       val file = new File(dir, filename)
       val relativePath = relativize(root, file)
       val archInfoPath = new File(statusDir, filename)
@@ -124,6 +130,12 @@ class Backup(root: File, cfg: Config, vault: Vault, reporter: String => Unit) {
   def run(): Int = {
     rootStatusDir.mkdirs()
 
+    val handler = Signal.handle(new Signal("INT"), new SignalHandler {
+      def handle(sig: Signal): Unit = {
+        reporter("SIGINT raised, let me finish the current task")
+        quit = true
+      }
+    })
     if (loop(root, rootStatusDir) == 0)
       reporter("Everything up-to-date.")
     0
