@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
 import java.io._
+import org.apache.commons.lang3.StringEscapeUtils
 
 import scala.collection.JavaConversions._
 
@@ -68,7 +69,8 @@ class AwsVault(
   def getName: String = name
 
   def upload(file: File, hash: String, desc: String): ArchiveInfo = {
-    val res = atm.upload(name, desc, file)
+    val escapedDesc = StringEscapeUtils.escapeHtml4(desc)
+    val res = atm.upload(name, escapedDesc, file)
     val now = new Date
     ArchiveInfo(
       res.getArchiveId,
@@ -202,7 +204,7 @@ class AwsVault(
       ArchiveInfo(
         amazonArchiveInfo.ArchiveId,
         amazonArchiveInfo.SHA256TreeHash,
-        amazonArchiveInfo.ArchiveDescription
+        StringEscapeUtils.unescapeHtml4(amazonArchiveInfo.ArchiveDescription)
       )
     }
   }

@@ -74,8 +74,10 @@ class Backup(root: File, cfg: Config, vault: Vault, reporter: String => Unit) {
         val relativePath = relativize(root, f)
         val hash = calculateTreeHash(f)
         reporter(s"Uploading new file: $relativePath")
-        upload(f, hash, relativePath)
-        action += 1
+        doTry {
+          upload(f, hash, relativePath)
+          action += 1
+        }
       }
     }
     deletedFiles.toSeq.sorted foreach { statusFilename =>
@@ -84,9 +86,11 @@ class Backup(root: File, cfg: Config, vault: Vault, reporter: String => Unit) {
       val relativePath = relativize(rootStatusDir, statusFile)
       val archiveInfo = ArchiveInfo.load(statusFile, relativePath)
       reporter(s"Removing deleted file: $relativePath")
-      vault.deleteArchive(archiveInfo.archiveId)
-      statusFile.delete()
-      action += 1
+      doTry {
+        vault.deleteArchive(archiveInfo.archiveId)
+        statusFile.delete()
+        action += 1
+      }
     }
     otherFiles.toSeq.sorted foreach { case filename =>
       if (quit) return action
@@ -96,18 +100,22 @@ class Backup(root: File, cfg: Config, vault: Vault, reporter: String => Unit) {
       val oldArchiveInfo = ArchiveInfo.load(archInfoPath, relativePath)
       if (file.length() == 0) {
         reporter(s"Removing zero-byte file: $relativePath")
-        vault.deleteArchive(oldArchiveInfo.archiveId)
-        archInfoPath.delete()
-        action += 1
+        doTry {
+          vault.deleteArchive(oldArchiveInfo.archiveId)
+          archInfoPath.delete()
+          action += 1
+        }
       } else {
         val hash = calculateTreeHash(file)
         if (hash != oldArchiveInfo.hash) {
           val relativePath = relativize(root, file)
           reporter(s"Updating modified file: $relativePath")
-          val newArchiveInfo = vault.upload(file, hash, relativePath)
-          newArchiveInfo.save(archInfoPath)
-          vault.deleteArchive(oldArchiveInfo.archiveId)
-          action += 1
+          doTry {
+            val newArchiveInfo = vault.upload(file, hash, relativePath)
+            newArchiveInfo.save(archInfoPath)
+            vault.deleteArchive(oldArchiveInfo.archiveId)
+            action += 1
+          }
         }
       }
     }
@@ -127,12 +135,20 @@ class Backup(root: File, cfg: Config, vault: Vault, reporter: String => Unit) {
     action
   }
 
+  private[this] def doTry[T](f: => T): Unit = {
+    try {
+      f
+    } catch {
+      case ex: Throwable => ex.printStackTrace()
+    }
+  }
+
   def run(): Int = {
     rootStatusDir.mkdirs()
 
     val handler = Signal.handle(new Signal("INT"), new SignalHandler {
       def handle(sig: Signal): Unit = {
-        reporter("SIGINT raised, let me finish the current task")
+        reporter("\nSIGINT raised, let me finish the current task")
         quit = true
       }
     })
